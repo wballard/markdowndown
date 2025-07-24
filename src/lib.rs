@@ -19,7 +19,7 @@
 pub mod types;
 
 /// HTTP client wrapper for network operations
-pub mod client {}
+pub mod client;
 
 /// URL type detection and classification
 pub mod detection {}

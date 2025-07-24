@@ -4,9 +4,13 @@
 //! with intelligent preprocessing to remove unwanted elements and postprocessing
 //! to clean up the markdown output.
 
-use crate::types::MarkdownError;
+use crate::client::HttpClient;
+use crate::types::{Markdown, MarkdownError};
+use async_trait::async_trait;
 use html2text::from_read;
 use std::io::Cursor;
+
+use super::Converter;
 
 /// Configuration options for HTML to markdown conversion.
 #[derive(Debug, Clone)]
@@ -42,6 +46,7 @@ impl Default for HtmlConverterConfig {
 #[derive(Debug, Clone)]
 pub struct HtmlConverter {
     config: HtmlConverterConfig,
+    client: HttpClient,
 }
 
 impl HtmlConverter {
@@ -57,11 +62,12 @@ impl HtmlConverter {
     /// use markdowndown::converters::HtmlConverter;
     ///
     /// let converter = HtmlConverter::new();
-    /// // Use converter.convert(html_string) to convert HTML to markdown
+    /// // Use converter.convert(url) to convert HTML from URL to markdown
     /// ```
     pub fn new() -> Self {
         Self {
             config: HtmlConverterConfig::default(),
+            client: HttpClient::new(),
         }
     }
 
@@ -75,7 +81,10 @@ impl HtmlConverter {
     ///
     /// A new `HtmlConverter` instance with the specified configuration.
     pub fn with_config(config: HtmlConverterConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            client: HttpClient::new(),
+        }
     }
 
     /// Converts HTML to clean markdown with preprocessing and postprocessing.
@@ -104,11 +113,11 @@ impl HtmlConverter {
     ///
     /// let converter = HtmlConverter::new();
     /// let html = "<h1>Hello World</h1><p>This is a test.</p>";
-    /// let markdown = converter.convert(html)?;
+    /// let markdown = converter.convert_html(html)?;
     /// assert!(markdown.contains("# Hello World"));
     /// # Ok::<(), markdowndown::types::MarkdownError>(())
     /// ```
-    pub fn convert(&self, html: &str) -> Result<String, MarkdownError> {
+    pub fn convert_html(&self, html: &str) -> Result<String, MarkdownError> {
         // Validate input
         if html.trim().is_empty() {
             return Err(MarkdownError::ParseError {
@@ -462,6 +471,26 @@ impl HtmlConverter {
     }
 }
 
+#[async_trait]
+impl Converter for HtmlConverter {
+    /// Converts content from a URL to markdown by fetching HTML and converting it.
+    async fn convert(&self, url: &str) -> Result<Markdown, MarkdownError> {
+        // Fetch HTML content from URL
+        let html_content = self.client.get_text(url).await?;
+
+        // Convert HTML to markdown string
+        let markdown_string = self.convert_html(&html_content)?;
+
+        // Wrap in Markdown type with validation
+        Markdown::new(markdown_string)
+    }
+
+    /// Returns the name of this converter.
+    fn name(&self) -> &'static str {
+        "HTML"
+    }
+}
+
 impl Default for HtmlConverter {
     fn default() -> Self {
         Self::new()
@@ -505,7 +534,7 @@ mod tests {
     #[test]
     fn test_convert_empty_html_error() {
         let converter = HtmlConverter::new();
-        let result = converter.convert("");
+        let result = converter.convert_html("");
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::ParseError { message } => {
@@ -518,7 +547,7 @@ mod tests {
     #[test]
     fn test_convert_whitespace_only_html_error() {
         let converter = HtmlConverter::new();
-        let result = converter.convert("   \n\t  ");
+        let result = converter.convert_html("   \n\t  ");
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::ParseError { message } => {
@@ -532,7 +561,7 @@ mod tests {
     fn test_convert_basic_html_success() {
         let converter = HtmlConverter::new();
         let html = "<h1>Hello World</h1><p>This is a test.</p>";
-        let result = converter.convert(html);
+        let result = converter.convert_html(html);
         assert!(result.is_ok());
         let markdown = result.unwrap();
         assert!(markdown.contains("Hello World"));
@@ -738,7 +767,7 @@ fn takes_ownership(some_string: String) {
 </html>
         "##;
 
-        let result = converter.convert(html).unwrap();
+        let result = converter.convert_html(html).unwrap();
 
         // Should contain main content
         assert!(result.contains("# Understanding Rust's Ownership System"));
@@ -823,7 +852,7 @@ fn takes_ownership(some_string: String) {
 </html>
         "##;
 
-        let result = converter.convert(html).unwrap();
+        let result = converter.convert_html(html).unwrap();
 
         // Should contain main article content
         assert!(result.contains("# Major AI Breakthrough Announced"));
@@ -916,7 +945,7 @@ fn takes_ownership(some_string: String) {
 </html>
         "##;
 
-        let result = converter.convert(html).unwrap();
+        let result = converter.convert_html(html).unwrap();
 
         // Should contain documentation content
         assert!(result.contains("# REST API Documentation"));

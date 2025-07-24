@@ -338,7 +338,7 @@ impl AsRef<str> for Url {
 }
 
 /// Enumeration of supported URL types for content extraction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UrlType {
     /// Generic HTML pages
     Html,

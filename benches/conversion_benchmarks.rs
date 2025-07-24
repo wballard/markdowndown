@@ -12,102 +12,17 @@ use markdowndown::types::{Markdown, Url};
 use markdowndown::{detect_url_type, MarkdownDown};
 use std::time::Duration;
 
-/// Sample HTML content for benchmarking
+/// Load sample HTML content from external fixture file
 #[allow(dead_code)]
-fn sample_html_content() -> &'static str {
-    r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>Benchmark Document</title>
-    <meta name="description" content="A document for performance testing">
-</head>
-<body>
-    <article>
-        <h1>Performance Test Document</h1>
-        <p>This document is used for benchmarking the HTML to markdown conversion process.</p>
-        
-        <h2>Section 1: Introduction</h2>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
-        <ul>
-            <li>First bullet point with <strong>bold text</strong></li>
-            <li>Second bullet point with <em>italic text</em></li>
-            <li>Third bullet point with <a href="https://example.com">a hyperlink</a></li>
-        </ul>
-        
-        <h2>Section 2: Content</h2>
-        <blockquote>
-            <p>This is a blockquote that should be preserved in the markdown conversion.</p>
-        </blockquote>
-        
-        <pre><code>function example() {
-    console.log("This is a code block");
-    return "benchmark";
-}</code></pre>
-        
-        <h2>Section 3: Tables</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Column 1</th>
-                    <th>Column 2</th>
-                    <th>Column 3</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Row 1, Col 1</td>
-                    <td>Row 1, Col 2</td>
-                    <td>Row 1, Col 3</td>
-                </tr>
-                <tr>
-                    <td>Row 2, Col 1</td>
-                    <td>Row 2, Col 2</td>
-                    <td>Row 2, Col 3</td>
-                </tr>
-            </tbody>
-        </table>
-    </article>
-</body>
-</html>"#
+fn sample_html_content() -> String {
+    std::fs::read_to_string("benches/fixtures/sample.html")
+        .expect("Failed to read sample HTML fixture file")
 }
 
-/// Sample markdown content for benchmarking
-fn sample_markdown_content() -> &'static str {
-    r#"# Performance Test Document
-
-This document is used for benchmarking markdown processing operations.
-
-## Section 1: Introduction
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-
-* First bullet point with **bold text**
-* Second bullet point with *italic text*
-* Third bullet point with [a hyperlink](https://example.com)
-
-## Section 2: Content
-
-> This is a blockquote that should be preserved during processing.
-
-```javascript
-function example() {
-    console.log("This is a code block");
-    return "benchmark";
-}
-```
-
-## Section 3: Performance Notes
-
-This content is designed to test various markdown processing scenarios:
-
-1. **Headers**: Multiple levels of headers
-2. **Lists**: Both ordered and unordered lists
-3. **Text formatting**: Bold, italic, and links
-4. **Code blocks**: Both inline and block code
-5. **Blockquotes**: Quote formatting
-6. **Complex structures**: Nested elements
-
-The goal is to measure processing time across different content types and sizes."#
+/// Load sample markdown content from external fixture file
+fn sample_markdown_content() -> String {
+    std::fs::read_to_string("benches/fixtures/sample.md")
+        .expect("Failed to read sample markdown fixture file")
 }
 
 /// Benchmark URL type detection
@@ -158,10 +73,11 @@ fn bench_markdowndown_creation(c: &mut Criterion) {
 fn bench_markdown_processing(c: &mut Criterion) {
     let mut group = c.benchmark_group("markdown_processing");
 
-    let medium_content = sample_markdown_content().repeat(5);
-    let large_content = sample_markdown_content().repeat(20);
+    let small_content = sample_markdown_content();
+    let medium_content = small_content.repeat(5);
+    let large_content = small_content.repeat(20);
     let content_sizes = vec![
-        ("small", sample_markdown_content()),
+        ("small", &small_content),
         ("medium", &medium_content),
         ("large", &large_content),
     ];
@@ -310,14 +226,15 @@ fn bench_memory_usage(c: &mut Criterion) {
         let content = sample_markdown_content();
         b.iter(|| {
             for _ in 0..100 {
-                let _ = Markdown::new(black_box(content.to_string()));
+                let _ = Markdown::new(black_box(content.clone()));
             }
         })
     });
 
     // Benchmark large content processing
     group.bench_function("large_content_processing", |b| {
-        let large_content = sample_markdown_content().repeat(50);
+        let base_content = sample_markdown_content();
+        let large_content = base_content.repeat(50);
         b.iter(|| {
             let markdown = Markdown::new(black_box(large_content.clone())).unwrap();
             let _ = black_box(markdown.content_only());

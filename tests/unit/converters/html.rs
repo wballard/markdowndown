@@ -9,63 +9,14 @@ use markdowndown::converters::{Converter, HtmlConverter, HtmlConverterConfig};
 use markdowndown::types::{MarkdownError, NetworkErrorKind, ValidationErrorKind};
 use mockito::Server;
 
-mod helpers {
-    use super::*;
+// Import shared test helpers
+use crate::helpers::converters::{
+    create_html_converter, create_html_converter_with_client,
+    SAMPLE_HTML_CONTENT,
+};
 
-    /// Create a test HTML converter with default configuration
-    pub fn create_test_converter() -> HtmlConverter {
-        HtmlConverter::new()
-    }
-
-    /// Create a test HTML converter with custom HTTP client
-    pub fn create_test_converter_with_client(client: HttpClient) -> HtmlConverter {
-        let config = HtmlConverterConfig::default();
-        HtmlConverter::with_config(client, config)
-    }
-
-    /// Sample HTML content for testing
-    pub fn sample_html_content() -> &'static str {
-        r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Document</title>
-    <meta name="description" content="This is a test document">
-</head>
-<body>
-    <h1>Main Heading</h1>
-    <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
-    
-    <h2>Subheading</h2>
-    <ul>
-        <li>First item</li>
-        <li>Second item with <a href="https://example.com">a link</a></li>
-        <li>Third item</li>
-    </ul>
-    
-    <blockquote>
-        <p>This is a blockquote with important information.</p>
-    </blockquote>
-    
-    <pre><code>// This is a code block
-function example() {
-    console.log("Hello, world!");
-}
-</code></pre>
-    
-    <div class="navigation">
-        <p>This content should be removed by preprocessing</p>
-    </div>
-    
-    <footer>
-        <p>Footer content that should be removed</p>
-    </footer>
-</body>
-</html>"#
-    }
-
-    /// Sample HTML with complex structure for testing preprocessing
-    pub fn complex_html_content() -> &'static str {
-        r#"<!DOCTYPE html>
+/// Sample HTML with complex structure for testing preprocessing
+const COMPLEX_HTML_CONTENT: &str = r#"<!DOCTYPE html>
 <html>
 <head>
     <title>Complex Document</title>
@@ -88,40 +39,63 @@ function example() {
     
     <main>
         <article>
-            <h1>Article Title</h1>
-            <p>Article content goes here.</p>
+            <h1>Complex Document Title</h1>
             
-            <div class="related-articles">
+            <div class="sidebar">
                 <h3>Related Articles</h3>
                 <ul>
                     <li><a href="/article1">Article 1</a></li>
                     <li><a href="/article2">Article 2</a></li>
                 </ul>
             </div>
+                
+            <div class="content">
+                <p>This is the main content that should be preserved.</p>
+                
+                <div class="ads">
+                    <div class="advertisement">
+                        <p>This is an advertisement that should be removed</p>
+                    </div>
+                </div>
+                
+                <h2>Technical Details</h2>
+                <pre><code>// Sample code block
+def process_data(data):
+    return [item.upper() for item in data]
+</code></pre>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Column 1</th>
+                            <th>Column 2</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Data 1</td>
+                            <td>Data 2</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </article>
-        
-        <aside class="sidebar">
-            <h3>Advertisement</h3>
-            <p>Buy our product!</p>
-        </aside>
     </main>
     
+    <aside class="sidebar">
+        <p>Sidebar content that should be removed</p>
+    </aside>
+    
     <footer>
-        <p>&copy; 2024 Example Corp</p>
-        <div class="social-links">
-            <a href="https://twitter.com/example">Twitter</a>
-            <a href="https://facebook.com/example">Facebook</a>
-        </div>
+        <p>Footer content</p>
     </footer>
     
     <script>
-        // Analytics script should be removed
+        // Analytics script that should be removed
         gtag('config', 'GA-XXXXXXXXX');
     </script>
 </body>
-</html>"#
-    }
-}
+</html>"#;
 
 /// Tests for HTML converter creation and configuration
 mod converter_creation_tests {
@@ -164,7 +138,7 @@ mod html_conversion_tests {
     #[tokio::test]
     async fn test_convert_basic_html() {
         let mut server = Server::new_async().await;
-        let html_content = helpers::sample_html_content();
+        let html_content = SAMPLE_HTML_CONTENT;
 
         let mock = server
             .mock("GET", "/test.html")
@@ -176,7 +150,7 @@ mod html_conversion_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/test.html", server.url());
         let result = converter.convert(&url).await;
@@ -187,13 +161,13 @@ mod html_conversion_tests {
         let markdown = result.unwrap();
         let content = markdown.content_only();
 
-        // Check for expected markdown elements
-        assert!(content.contains("# Main Heading"));
-        assert!(content.contains("## Subheading"));
-        assert!(content.contains("**bold text**"));
-        assert!(content.contains("*italic text*"));
-        assert!(content.contains("[a link](https://example.com)"));
-        assert!(content.contains("* First item"));
+        // Check for expected markdown elements based on SAMPLE_HTML_CONTENT
+        assert!(content.contains("# Test Article"));
+        assert!(content.contains("## Features"));
+        assert!(content.contains("**formatting**"));
+        assert!(content.contains("*text*"));
+        assert!(content.contains("[External links](https://example.com)"));
+        assert!(content.contains("* Basic"));
 
         // Should not contain unwanted HTML elements
         assert!(!content.contains("<div"));
@@ -204,7 +178,7 @@ mod html_conversion_tests {
     #[tokio::test]
     async fn test_convert_complex_html_with_preprocessing() {
         let mut server = Server::new_async().await;
-        let html_content = helpers::complex_html_content();
+        let html_content = COMPLEX_HTML_CONTENT;
 
         let mock = server
             .mock("GET", "/complex.html")
@@ -216,7 +190,7 @@ mod html_conversion_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/complex.html", server.url());
         let result = converter.convert(&url).await;
@@ -227,9 +201,9 @@ mod html_conversion_tests {
         let markdown = result.unwrap();
         let content = markdown.content_only();
 
-        // Check for main content
-        assert!(content.contains("# Article Title"));
-        assert!(content.contains("Article content goes here"));
+        // Check for main content based on COMPLEX_HTML_CONTENT
+        assert!(content.contains("# Complex Document Title"));
+        assert!(content.contains("This is the main content that should be preserved."));
 
         // Should not contain scripts, styles, or navigation elements
         assert!(!content.contains("trackUser"));
@@ -260,7 +234,7 @@ mod html_conversion_tests {
             .timeout_seconds(5)
             .build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/protected.html", server.url());
         let result = converter.convert(&url).await;
@@ -299,7 +273,7 @@ mod html_conversion_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/encoding.html", server.url());
         let result = converter.convert(&url).await;
@@ -334,7 +308,7 @@ mod html_conversion_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/empty.html", server.url());
         let result = converter.convert(&url).await;
@@ -379,7 +353,7 @@ mod html_conversion_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/malformed.html", server.url());
         let result = converter.convert(&url).await;
@@ -404,7 +378,7 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_convert_invalid_url() {
-        let converter = helpers::create_test_converter();
+        let converter = create_html_converter();
         let result = converter.convert("not-a-valid-url").await;
 
         assert!(result.is_err());
@@ -429,7 +403,7 @@ mod error_handling_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/notfound.html", server.url());
         let result = converter.convert(&url).await;
@@ -464,7 +438,7 @@ mod error_handling_tests {
             .max_retries(1) // Reduce retries for faster test
             .build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/error.html", server.url());
         let result = converter.convert(&url).await;
@@ -497,7 +471,7 @@ mod error_handling_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/data.json", server.url());
         let result = converter.convert(&url).await;
@@ -540,7 +514,7 @@ mod error_handling_tests {
             .timeout_seconds(10) // Longer timeout for large content
             .build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/large.html", server.url());
         let result = converter.convert(&url).await;
@@ -593,7 +567,7 @@ mod configuration_tests {
     #[tokio::test]
     async fn test_converter_respects_configuration() {
         let mut server = Server::new_async().await;
-        let html_content = helpers::complex_html_content();
+        let html_content = COMPLEX_HTML_CONTENT;
 
         let mock = server
             .mock("GET", "/config-test.html")
@@ -626,7 +600,7 @@ mod configuration_tests {
         let content = markdown.content_only();
 
         // With conservative config, more content should be preserved
-        assert!(content.contains("Article Title"));
+        assert!(content.contains("Complex Document Title"));
         // Navigation and footer content might be preserved depending on implementation
     }
 }
@@ -638,7 +612,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_end_to_end_html_conversion() {
         let mut server = Server::new_async().await;
-        let html_content = helpers::sample_html_content();
+        let html_content = SAMPLE_HTML_CONTENT;
 
         let mock = server
             .mock("GET", "/integration-test.html")
@@ -654,7 +628,7 @@ mod integration_tests {
             .max_retries(2)
             .build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/integration-test.html", server.url());
         let result = converter.convert(&url).await;
@@ -665,14 +639,14 @@ mod integration_tests {
         let markdown = result.unwrap();
         let content = markdown.content_only();
 
-        // Verify all major markdown elements are present
-        assert!(content.contains("# Main Heading"));
-        assert!(content.contains("## Subheading"));
-        assert!(content.contains("**bold text**"));
-        assert!(content.contains("*italic text*"));
-        assert!(content.contains("[a link](https://example.com)"));
-        assert!(content.contains("* First item"));
-        assert!(content.contains("* Second item"));
+        // Verify all major markdown elements are present based on SAMPLE_HTML_CONTENT
+        assert!(content.contains("# Test Article"));
+        assert!(content.contains("## Features"));
+        assert!(content.contains("**formatting**"));
+        assert!(content.contains("*text*"));
+        assert!(content.contains("[External links](https://example.com)"));
+        assert!(content.contains("* Basic"));
+        assert!(content.contains("* Multiple"));
         assert!(content.contains("> This is a blockquote"));
 
         // Verify frontmatter is included if configured
@@ -704,7 +678,7 @@ mod integration_tests {
 
         let config = Config::builder().timeout_seconds(5).build();
         let client = HttpClient::with_config(&config.http, &config.auth);
-        let converter = helpers::create_test_converter_with_client(client);
+        let converter = create_html_converter_with_client(client);
 
         let url = format!("{}/redirect-source", server.url());
         let result = converter.convert(&url).await;

@@ -17,6 +17,13 @@ mod helpers {
     pub fn create_test_error_context() -> ErrorContext {
         ErrorContext::new("https://test.com", "test operation", "TestConverter")
     }
+
+    pub fn assert_parse_error(result: Result<Markdown, MarkdownError>, expected_message: &str) {
+        match result.unwrap_err() {
+            MarkdownError::ParseError { message } => assert_eq!(message, expected_message),
+            err => panic!("Expected ParseError, got: {err:?}"),
+        }
+    }
 }
 
 /// Tests for the Markdown newtype wrapper
@@ -41,32 +48,19 @@ mod markdown_tests {
     #[test]
     fn test_markdown_new_empty_content_fails() {
         let result = Markdown::new("".to_string());
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            MarkdownError::ParseError { message } => {
-                assert_eq!(
-                    message,
-                    "Markdown content cannot be empty or whitespace-only"
-                );
-            }
-            _ => panic!("Expected ParseError for empty content"),
-        }
+        helpers::assert_parse_error(
+            result,
+            "Markdown content cannot be empty or whitespace-only",
+        );
     }
 
     #[test]
     fn test_markdown_new_whitespace_only_fails() {
-        let whitespace_content = "   \n\t  \r\n  ";
-        let result = Markdown::new(whitespace_content.to_string());
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            MarkdownError::ParseError { message } => {
-                assert_eq!(
-                    message,
-                    "Markdown content cannot be empty or whitespace-only"
-                );
-            }
-            _ => panic!("Expected ParseError for whitespace-only content"),
-        }
+        let result = Markdown::new("   \n\t  \r\n  ".to_string());
+        helpers::assert_parse_error(
+            result,
+            "Markdown content cannot be empty or whitespace-only",
+        );
     }
 
     #[test]

@@ -45,9 +45,18 @@ impl ConverterRegistry {
 
         // Register default converters
         registry.register(UrlType::Html, Box::new(super::HtmlConverter::new()));
-        registry.register(UrlType::GoogleDocs, Box::new(super::GoogleDocsConverter::new()));
-        registry.register(UrlType::Office365, Box::new(super::placeholder::Office365Converter::new()));
-        registry.register(UrlType::GitHubIssue, Box::new(super::placeholder::GitHubIssueConverter::new()));
+        registry.register(
+            UrlType::GoogleDocs,
+            Box::new(super::GoogleDocsConverter::new()),
+        );
+        registry.register(
+            UrlType::Office365,
+            Box::new(super::placeholder::Office365Converter::new()),
+        );
+        registry.register(
+            UrlType::GitHubIssue,
+            Box::new(super::placeholder::GitHubIssueConverter::new()),
+        );
 
         registry
     }
@@ -65,7 +74,10 @@ impl ConverterRegistry {
         // Register configured converters
         registry.register(
             UrlType::Html,
-            Box::new(super::HtmlConverter::with_config(http_client.clone(), html_config)),
+            Box::new(super::HtmlConverter::with_config(
+                http_client.clone(),
+                html_config,
+            )),
         );
         registry.register(
             UrlType::GoogleDocs,
@@ -73,17 +85,21 @@ impl ConverterRegistry {
         );
         registry.register(
             UrlType::Office365,
-            Box::new(super::placeholder::Office365Converter::with_client_and_settings(
-                http_client.clone(),
-                placeholder_settings,
-            )),
+            Box::new(
+                super::placeholder::Office365Converter::with_client_and_settings(
+                    http_client.clone(),
+                    placeholder_settings,
+                ),
+            ),
         );
         registry.register(
             UrlType::GitHubIssue,
-            Box::new(super::placeholder::GitHubIssueConverter::with_client_and_settings(
-                http_client,
-                placeholder_settings,
-            )),
+            Box::new(
+                super::placeholder::GitHubIssueConverter::with_client_and_settings(
+                    http_client,
+                    placeholder_settings,
+                ),
+            ),
         );
 
         registry

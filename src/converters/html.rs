@@ -63,14 +63,14 @@ impl HtmlConverter {
     /// # Arguments
     ///
     /// * `config` - Custom configuration options for the converter
-    /// 
+    ///
     /// # Returns
     ///
     /// A new `HtmlConverter` instance with the specified configuration and default HTTP client.
     pub fn with_config_only(config: HtmlConverterConfig) -> Self {
-        Self { 
-            config, 
-            client: HttpClient::new() 
+        Self {
+            config,
+            client: HttpClient::new(),
         }
     }
 

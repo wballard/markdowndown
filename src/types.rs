@@ -380,7 +380,7 @@ impl ErrorContext {
     /// Creates a new error context with the specified details.
     pub fn new(
         url: impl Into<String>,
-        operation: impl Into<String>, 
+        operation: impl Into<String>,
         converter_type: impl Into<String>,
     ) -> Self {
         Self {
@@ -489,7 +489,7 @@ pub enum MarkdownError {
     },
 
     /// Configuration and system setup errors
-    #[error("Configuration error: {kind:?} - {context:?}")]  
+    #[error("Configuration error: {kind:?} - {context:?}")]
     ConfigurationError {
         kind: ConfigErrorKind,
         context: ErrorContext,
@@ -541,14 +541,16 @@ impl MarkdownError {
                 NetworkErrorKind::RateLimited => true,
                 NetworkErrorKind::ServerError(status) => *status >= 500,
             },
-            MarkdownError::AuthenticationError { kind, .. } => match kind {
-                AuthErrorKind::TokenExpired => true,
-                _ => false,
-            },
+            MarkdownError::AuthenticationError {
+                kind: AuthErrorKind::TokenExpired,
+                ..
+            } => true,
             // Legacy network errors - use simple heuristics based on message content
             MarkdownError::NetworkError { message } => {
-                message.contains("timeout") || message.contains("connection") || message.contains("rate limit")
-            },
+                message.contains("timeout")
+                    || message.contains("connection")
+                    || message.contains("rate limit")
+            }
             _ => false,
         }
     }
@@ -559,10 +561,10 @@ impl MarkdownError {
             MarkdownError::EnhancedNetworkError { .. } => true,
             MarkdownError::AuthenticationError { .. } => true,
             MarkdownError::ConverterError { .. } => true,
-            MarkdownError::ContentError { kind, .. } => match kind {
-                ContentErrorKind::UnsupportedFormat => true,
-                _ => false,
-            },
+            MarkdownError::ContentError {
+                kind: ContentErrorKind::UnsupportedFormat,
+                ..
+            } => true,
             // Legacy errors are considered recoverable for network and auth issues
             MarkdownError::NetworkError { .. } => true,
             MarkdownError::AuthError { .. } => true,
@@ -579,12 +581,12 @@ impl MarkdownError {
                     "Check that the URL is complete and properly formatted".to_string(),
                     "Try copying the URL directly from your browser".to_string(),
                 ],
-                ValidationErrorKind::InvalidFormat => vec![
-                    "Verify the input format matches the expected pattern".to_string(),
-                ],
-                ValidationErrorKind::MissingParameter => vec![
-                    "Check that all required parameters are provided".to_string(),
-                ],
+                ValidationErrorKind::InvalidFormat => {
+                    vec!["Verify the input format matches the expected pattern".to_string()]
+                }
+                ValidationErrorKind::MissingParameter => {
+                    vec!["Check that all required parameters are provided".to_string()]
+                }
             },
             MarkdownError::EnhancedNetworkError { kind, .. } => match kind {
                 NetworkErrorKind::Timeout => vec![
@@ -622,9 +624,9 @@ impl MarkdownError {
                     "Ensure you have permission to access this resource".to_string(),
                     "Check that your token has the required scopes".to_string(),
                 ],
-                AuthErrorKind::TokenExpired => vec![
-                    "Refresh or regenerate your authentication token".to_string(),
-                ],
+                AuthErrorKind::TokenExpired => {
+                    vec!["Refresh or regenerate your authentication token".to_string()]
+                }
             },
             MarkdownError::ContentError { kind, .. } => match kind {
                 ContentErrorKind::EmptyContent => vec![
@@ -1202,7 +1204,7 @@ mod tests {
                 let context = ErrorContext::new(
                     "https://example.com/test",
                     "URL validation",
-                    "TestConverter"
+                    "TestConverter",
                 );
 
                 assert_eq!(context.url, "https://example.com/test");
@@ -1220,20 +1222,20 @@ mod tests {
                 let context = ErrorContext::new(
                     "https://example.com/test",
                     "URL validation",
-                    "TestConverter"
-                ).with_info("Additional debugging info");
+                    "TestConverter",
+                )
+                .with_info("Additional debugging info");
 
-                assert_eq!(context.additional_info, Some("Additional debugging info".to_string()));
+                assert_eq!(
+                    context.additional_info,
+                    Some("Additional debugging info".to_string())
+                );
             }
 
             #[test]
             fn test_validation_error_creation() {
-                let context = ErrorContext::new(
-                    "invalid-url",
-                    "URL parsing",
-                    "UrlValidator"
-                );
-                
+                let context = ErrorContext::new("invalid-url", "URL parsing", "UrlValidator");
+
                 let error = MarkdownError::ValidationError {
                     kind: ValidationErrorKind::InvalidUrl,
                     context: context.clone(),
@@ -1242,18 +1244,16 @@ mod tests {
                 assert_eq!(error.context(), Some(&context));
                 assert!(!error.is_retryable());
                 assert!(!error.is_recoverable());
-                
+
                 let suggestions = error.suggestions();
-                assert!(suggestions.contains(&"Ensure the URL starts with http:// or https://".to_string()));
+                assert!(suggestions
+                    .contains(&"Ensure the URL starts with http:// or https://".to_string()));
             }
 
             #[test]
             fn test_network_error_retryable() {
-                let context = ErrorContext::new(
-                    "https://example.com",
-                    "HTTP request",
-                    "HttpClient"
-                );
+                let context =
+                    ErrorContext::new("https://example.com", "HTTP request", "HttpClient");
 
                 // Test retryable network errors
                 let timeout_error = MarkdownError::EnhancedNetworkError {
@@ -1298,11 +1298,8 @@ mod tests {
 
             #[test]
             fn test_auth_error_retryable() {
-                let context = ErrorContext::new(
-                    "https://api.example.com",
-                    "API request",
-                    "ApiClient"
-                );
+                let context =
+                    ErrorContext::new("https://api.example.com", "API request", "ApiClient");
 
                 // Only expired tokens should be retryable
                 let expired_token_error = MarkdownError::AuthenticationError {
@@ -1337,7 +1334,7 @@ mod tests {
                 let context = ErrorContext::new(
                     "https://example.com/document",
                     "Content parsing",
-                    "ContentParser"
+                    "ContentParser",
                 );
 
                 // Unsupported format should be recoverable
@@ -1367,7 +1364,7 @@ mod tests {
                 let context = ErrorContext::new(
                     "https://example.com/document",
                     "Document conversion",
-                    "PandocConverter"
+                    "PandocConverter",
                 );
 
                 let converter_error = MarkdownError::ConverterError {
@@ -1383,7 +1380,7 @@ mod tests {
                 let context = ErrorContext::new(
                     "file://config.yaml",
                     "Configuration loading",
-                    "ConfigLoader"
+                    "ConfigLoader",
                 );
 
                 let config_error = MarkdownError::ConfigurationError {
@@ -1396,11 +1393,8 @@ mod tests {
 
             #[test]
             fn test_error_suggestions_comprehensive() {
-                let context = ErrorContext::new(
-                    "https://example.com",
-                    "Test operation",
-                    "TestConverter"
-                );
+                let context =
+                    ErrorContext::new("https://example.com", "Test operation", "TestConverter");
 
                 // Test validation error suggestions
                 let validation_error = MarkdownError::ValidationError {
@@ -1411,13 +1405,15 @@ mod tests {
                 assert!(!suggestions.is_empty());
                 assert!(suggestions.iter().any(|s| s.contains("http")));
 
-                // Test network error suggestions  
+                // Test network error suggestions
                 let network_error = MarkdownError::EnhancedNetworkError {
                     kind: NetworkErrorKind::Timeout,
                     context: context.clone(),
                 };
                 let suggestions = network_error.suggestions();
-                assert!(suggestions.iter().any(|s| s.contains("internet connection")));
+                assert!(suggestions
+                    .iter()
+                    .any(|s| s.contains("internet connection")));
 
                 // Test auth error suggestions
                 let auth_error = MarkdownError::AuthenticationError {
@@ -1458,11 +1454,11 @@ mod tests {
                 let legacy_parse_error = MarkdownError::ParseError {
                     message: "Legacy parsing failed".to_string(),
                 };
-                
+
                 assert!(legacy_parse_error.context().is_none());
                 assert!(!legacy_parse_error.is_retryable());
                 assert!(!legacy_parse_error.is_recoverable());
-                
+
                 let suggestions = legacy_parse_error.suggestions();
                 assert!(suggestions.iter().any(|s| s.contains("content format")));
 
@@ -1470,23 +1466,25 @@ mod tests {
                 let legacy_network_error = MarkdownError::NetworkError {
                     message: "Connection timeout occurred".to_string(),
                 };
-                
+
                 assert!(legacy_network_error.context().is_none());
                 assert!(legacy_network_error.is_retryable()); // Should detect "timeout" in message
                 assert!(legacy_network_error.is_recoverable());
-                
+
                 let suggestions = legacy_network_error.suggestions();
-                assert!(suggestions.iter().any(|s| s.contains("internet connection")));
+                assert!(suggestions
+                    .iter()
+                    .any(|s| s.contains("internet connection")));
 
                 // Test legacy invalid URL error
                 let legacy_url_error = MarkdownError::InvalidUrl {
                     url: "not-a-url".to_string(),
                 };
-                
+
                 assert!(legacy_url_error.context().is_none());
                 assert!(!legacy_url_error.is_retryable());
                 assert!(!legacy_url_error.is_recoverable());
-                
+
                 let suggestions = legacy_url_error.suggestions();
                 assert!(suggestions.iter().any(|s| s.contains("http")));
             }
@@ -1496,7 +1494,7 @@ mod tests {
                 let context = ErrorContext::new(
                     "https://example.com/test",
                     "Test operation",
-                    "TestConverter"
+                    "TestConverter",
                 );
 
                 let error = MarkdownError::ValidationError {
@@ -1513,14 +1511,15 @@ mod tests {
             fn test_error_context_serialization() {
                 let context = ErrorContext::new(
                     "https://example.com/test",
-                    "Test operation", 
-                    "TestConverter"
-                ).with_info("Additional context");
+                    "Test operation",
+                    "TestConverter",
+                )
+                .with_info("Additional context");
 
                 // Test that ErrorContext can be serialized/deserialized
                 let yaml = serde_yaml::to_string(&context).unwrap();
                 let deserialized: ErrorContext = serde_yaml::from_str(&yaml).unwrap();
-                
+
                 assert_eq!(context.url, deserialized.url);
                 assert_eq!(context.operation, deserialized.operation);
                 assert_eq!(context.converter_type, deserialized.converter_type);

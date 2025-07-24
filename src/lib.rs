@@ -36,7 +36,8 @@ pub mod config;
 use crate::client::HttpClient;
 use crate::converters::ConverterRegistry;
 use crate::detection::UrlDetector;
-use crate::types::{Markdown, MarkdownError};
+use crate::types::{Markdown, MarkdownError, UrlType};
+use tracing::{info, warn, error, debug, instrument};
 
 /// Main library struct providing unified URL to markdown conversion.
 ///
@@ -163,22 +164,62 @@ impl MarkdownDown {
     /// # Ok(())
     /// # }
     /// ```
+    #[instrument(skip(self), fields(url_type))]
     pub async fn convert_url(&self, url: &str) -> Result<Markdown, MarkdownError> {
+        info!("Starting URL conversion for: {}", url);
+        
         // Step 1: Normalize the URL
+        debug!("Normalizing URL");
         let normalized_url = self.detector.normalize_url(url)?;
+        debug!("Normalized URL: {}", normalized_url);
 
         // Step 2: Detect URL type
+        debug!("Detecting URL type");
         let url_type = self.detector.detect_type(&normalized_url)?;
+        tracing::Span::current().record("url_type", &format!("{}", url_type));
+        info!("Detected URL type: {}", url_type);
 
         // Step 3: Get appropriate converter
+        debug!("Looking up converter for type: {}", url_type);
         let converter = self.registry.get_converter(&url_type).ok_or_else(|| {
+            error!("No converter available for URL type: {}", url_type);
             MarkdownError::LegacyConfigurationError {
                 message: format!("No converter available for URL type: {url_type}"),
             }
         })?;
+        debug!("Found converter for type: {}", url_type);
 
         // Step 4: Convert using the selected converter
-        converter.convert(&normalized_url).await
+        info!("Starting conversion with {} converter", url_type);
+        match converter.convert(&normalized_url).await {
+            Ok(result) => {
+                info!("Successfully converted URL to markdown ({} chars)", result.as_str().len());
+                Ok(result)
+            }
+            Err(e) => {
+                error!("Primary converter failed: {}", e);
+                
+                // Step 5: Attempt fallback strategies for recoverable errors
+                if e.is_recoverable() && url_type != UrlType::Html {
+                    warn!("Attempting HTML fallback conversion for recoverable error");
+                    
+                    // Try HTML converter as fallback
+                    if let Some(html_converter) = self.registry.get_converter(&UrlType::Html) {
+                        match html_converter.convert(&normalized_url).await {
+                            Ok(fallback_result) => {
+                                warn!("Fallback HTML conversion succeeded ({} chars)", fallback_result.as_str().len());
+                                return Ok(fallback_result);
+                            }
+                            Err(fallback_error) => {
+                                error!("Fallback HTML conversion also failed: {}", fallback_error);
+                            }
+                        }
+                    }
+                }
+                
+                Err(e)
+            }
+        }
     }
 
     /// Returns the configuration being used by this instance.
@@ -297,7 +338,7 @@ pub fn detect_url_type(url: &str) -> Result<crate::types::UrlType, MarkdownError
 // Re-export main API items for convenience
 pub use config::Config;
 pub use converters::{Converter, HtmlConverter};
-pub use types::{Frontmatter, Url, UrlType};
+pub use types::{Frontmatter, Url};
 
 /// Library version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -305,10 +346,10 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use crate::converters::GitHubConverter;
     use crate::detection::UrlDetector;
     use crate::types::UrlType;
+    use std::time::Duration;
 
     #[test]
     fn test_version_available() {

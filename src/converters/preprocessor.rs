@@ -46,7 +46,7 @@ impl<'a> HtmlPreprocessor<'a> {
             r"(?i)<{tag_name}(?:\s[^>]*)?>.*?</{tag_name}>|<{tag_name}(?:\s[^>]*)?/>",
             tag_name = regex::escape(tag_name)
         );
-        
+
         match Regex::new(&pattern) {
             Ok(re) => re.replace_all(html, "").to_string(),
             Err(_) => {
@@ -64,7 +64,7 @@ impl<'a> HtmlPreprocessor<'a> {
             r#"(?is)<(\w+)[^>]*class\s*=\s*["'][^"']*\b{class_name}\b[^"']*["'][^>]*>.*?</\1>"#,
             class_name = regex::escape(class_name)
         );
-        
+
         match Regex::new(&pattern) {
             Ok(re) => re.replace_all(html, "").to_string(),
             Err(_) => {
@@ -82,17 +82,17 @@ impl<'a> HtmlPreprocessor<'a> {
         while let Some(class_pos) = result.find(&pattern) {
             // Find the start of the tag containing this class
             let tag_start = result[..class_pos].rfind('<').unwrap_or(0);
-            
+
             // Find the end of the opening tag
             if let Some(tag_end) = result[tag_start..].find('>') {
                 let tag_end_pos = tag_start + tag_end + 1;
-                
+
                 // Extract tag name to find closing tag
                 let tag_content = &result[tag_start..tag_end_pos];
                 if let Some(space_pos) = tag_content[1..].find(' ') {
                     let tag_name = &tag_content[1..space_pos + 1];
                     let closing_tag = format!("</{tag_name}>");
-                    
+
                     if let Some(close_pos) = result[tag_end_pos..].find(&closing_tag) {
                         let close_end = tag_end_pos + close_pos + closing_tag.len();
                         result.replace_range(tag_start..close_end, "");

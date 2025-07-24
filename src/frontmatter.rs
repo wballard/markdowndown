@@ -342,6 +342,7 @@ pub fn strip_frontmatter(markdown: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ValidationErrorKind;
     use chrono::DateTime;
 
     #[test]
@@ -408,10 +409,11 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::InvalidUrl { url } => {
-                assert_eq!(url, "not-a-url");
+            MarkdownError::ValidationError { kind, context } => {
+                assert_eq!(kind, ValidationErrorKind::InvalidUrl);
+                assert_eq!(context.url, "not-a-url");
             }
-            _ => panic!("Expected InvalidUrl error"),
+            _ => panic!("Expected ValidationError with InvalidUrl kind"),
         }
     }
 

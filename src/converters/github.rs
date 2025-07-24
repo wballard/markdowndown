@@ -102,6 +102,8 @@ pub struct GitHubResource {
 /// GitHub issue or pull request data from API.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Issue {
+    /// Issue ID (GitHub's internal identifier)
+    pub id: u64,
     /// Issue number
     pub number: u32,
     /// Issue title
@@ -280,6 +282,32 @@ impl GitHubConverter {
             client: HttpClient::new(),
             auth_token: Some(token),
             api_base_url: DEFAULT_GITHUB_API_BASE_URL.to_string(),
+        }
+    }
+
+    /// Creates a GitHub converter with custom API base URL (primarily for testing).
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - Optional GitHub personal access token
+    /// * `api_base_url` - Custom API base URL (e.g., for testing with mock servers)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use markdowndown::converters::GitHubConverter;
+    ///
+    /// // Create converter with mock server URL for testing
+    /// let converter = GitHubConverter::new_with_config(
+    ///     Some("token".to_string()),
+    ///     "http://localhost:8080".to_string()
+    /// );
+    /// ```
+    pub fn new_with_config(token: Option<String>, api_base_url: String) -> Self {
+        Self {
+            client: HttpClient::new(),
+            auth_token: token,
+            api_base_url,
         }
     }
 
@@ -680,6 +708,7 @@ mod tests {
         labels: Vec<Label>,
     ) -> Issue {
         Issue {
+            id: 123456789, // Default test ID
             number,
             title: title.to_string(),
             body: body.map(|s| s.to_string()),

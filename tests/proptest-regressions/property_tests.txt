@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7f18c99b84b8e8e8e542245f3ba864aa1cb620b123e79cf36cb022d13ed4c9a1 # shrinks to network_status = 400
+cc cec9d093d36bfbfd3b93fa6d49dec69c92b2b3ce5a94ffe9c4622157e00c2912 # shrinks to content = ""
+cc 92ea60bf00d38eea97c712ac99a263e3305fbe142701372058e18ac02176d6e8 # shrinks to content = "Default content", frontmatter = "---\naAAA\n-\n---\n---"
+cc f9b342d4637e84861126c26fa3d392f34b0141b1f2d148c15375b0da093f1f17 # shrinks to content = "# 0\n\n", frontmatter = "---\nAaA --Aa0-\n---"
+cc 161ef700a03af285a40ed7421bfe80836b2fe4a3dcd404b617253807da6ea065 # shrinks to content = "Default content", frontmatter = "---\n---\na -A\na\n---"

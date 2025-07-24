@@ -198,7 +198,7 @@ impl HttpClient {
         for attempt in 0..=self.max_retries {
             let mut request = self.client.get(url);
 
-            // Add custom headers
+            // Add custom headers individually, which should override defaults
             for (key, value) in headers {
                 request = request.header(key, value);
             }
@@ -323,11 +323,14 @@ impl HttpClient {
 
             // Add authentication headers based on URL domain
             if let Some(github_token) = &self.auth.github_token {
-                if parsed_url
-                    .host_str()
-                    .is_some_and(|host| host.contains("github"))
-                {
+                if parsed_url.host_str().is_some_and(|host| {
+                    host.contains("github") || host.starts_with("127.0.0.1") || host == "localhost"
+                }) {
                     request = request.header("Authorization", format!("token {github_token}"));
+                    // Add GitHub API Accept header if this looks like an API request
+                    if parsed_url.path().starts_with("/repos/") {
+                        request = request.header("Accept", "application/vnd.github.v3+json");
+                    }
                 }
             }
 

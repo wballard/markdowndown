@@ -48,6 +48,15 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use url::Url as ParsedUrl;
 
+/// Default GitHub API base URL
+const DEFAULT_GITHUB_API_BASE_URL: &str = "https://api.github.com";
+
+/// GitHub API version header value
+const GITHUB_API_VERSION: &str = "application/vnd.github.v3+json";
+
+/// User-Agent string prefix for GitHub API requests
+const USER_AGENT_PREFIX: &str = "markdowndown";
+
 /// GitHub resource types supported for conversion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResourceType {
@@ -205,7 +214,7 @@ impl ReactionCounts {
                     "eyes" => "👀",
                     _ => emoji,
                 };
-                format!("{} {}", display_emoji, count)
+                format!("{display_emoji} {count}")
             })
             .collect();
 
@@ -245,7 +254,7 @@ impl GitHubConverter {
         Self {
             client: HttpClient::new(),
             auth_token: None,
-            api_base_url: "https://api.github.com".to_string(),
+            api_base_url: DEFAULT_GITHUB_API_BASE_URL.to_string(),
         }
     }
 
@@ -270,7 +279,7 @@ impl GitHubConverter {
         Self {
             client: HttpClient::new(),
             auth_token: Some(token),
-            api_base_url: "https://api.github.com".to_string(),
+            api_base_url: DEFAULT_GITHUB_API_BASE_URL.to_string(),
         }
     }
 
@@ -329,7 +338,7 @@ impl GitHubConverter {
     /// let converter = GitHubConverter::new();
     /// let url = "https://github.com/microsoft/vscode/issues/1234";
     /// let markdown = converter.convert(url).await?;
-    /// 
+    ///
     /// // The result includes frontmatter with metadata
     /// assert!(markdown.as_str().contains("source_url:"));
     /// assert!(markdown.as_str().contains("github_issue_number:"));
@@ -340,19 +349,40 @@ impl GitHubConverter {
         // Step 1: Parse and validate the GitHub URL
         let resource = self.parse_github_url(url)?;
 
-        // Step 2: Fetch issue/PR data from GitHub API
-        let issue = self.fetch_issue(&resource.owner, &resource.repo, resource.number).await?;
+        // Step 2-3: Fetch issue/PR data and comments from GitHub API
+        let (issue, comments) = self.fetch_issue_and_comments(&resource).await?;
 
-        // Step 3: Fetch all comments
-        let comments = self.fetch_comments(&resource.owner, &resource.repo, resource.number).await?;
+        // Step 4-6: Render content and create final markdown
+        self.create_markdown_document(&resource, &issue, &comments)
+    }
 
-        // Step 4: Render issue and comments as markdown
-        let content = self.render_markdown(&issue, &comments);
+    /// Fetches issue/PR data and comments in parallel for better performance.
+    async fn fetch_issue_and_comments(
+        &self,
+        resource: &GitHubResource,
+    ) -> Result<(Issue, Vec<Comment>), MarkdownError> {
+        let issue_future = self.fetch_issue(&resource.owner, &resource.repo, resource.number);
+        let comments_future = self.fetch_comments(&resource.owner, &resource.repo, resource.number);
 
-        // Step 5: Generate frontmatter with metadata
-        let frontmatter = self.build_frontmatter(&resource, &issue)?;
+        // Fetch both concurrently
+        let (issue, comments) = tokio::try_join!(issue_future, comments_future)?;
+        Ok((issue, comments))
+    }
 
-        // Step 6: Combine frontmatter with content
+    /// Creates the final markdown document with frontmatter and content.
+    fn create_markdown_document(
+        &self,
+        resource: &GitHubResource,
+        issue: &Issue,
+        comments: &[Comment],
+    ) -> Result<Markdown, MarkdownError> {
+        // Render issue and comments as markdown
+        let content = self.render_markdown(issue, comments);
+
+        // Generate frontmatter with metadata
+        let frontmatter = self.build_frontmatter(resource, issue)?;
+
+        // Combine frontmatter with content
         let markdown_with_frontmatter = format!("{frontmatter}\n{content}");
 
         Markdown::new(markdown_with_frontmatter)
@@ -387,9 +417,11 @@ impl GitHubConverter {
         })?;
 
         // Check if this is a GitHub URL
-        let host = parsed_url.host_str().ok_or_else(|| MarkdownError::InvalidUrl {
-            url: url.to_string(),
-        })?;
+        let host = parsed_url
+            .host_str()
+            .ok_or_else(|| MarkdownError::InvalidUrl {
+                url: url.to_string(),
+            })?;
 
         if host != "github.com" {
             return Err(MarkdownError::InvalidUrl {
@@ -424,9 +456,11 @@ impl GitHubConverter {
         };
 
         // Parse issue/PR number
-        let number = number_str.parse::<u32>().map_err(|_| MarkdownError::InvalidUrl {
-            url: url.to_string(),
-        })?;
+        let number = number_str
+            .parse::<u32>()
+            .map_err(|_| MarkdownError::InvalidUrl {
+                url: url.to_string(),
+            })?;
 
         Ok(GitHubResource {
             owner,
@@ -438,24 +472,42 @@ impl GitHubConverter {
     }
 
     /// Fetches issue or pull request data from GitHub API.
-    pub async fn fetch_issue(&self, owner: &str, repo: &str, number: u32) -> Result<Issue, MarkdownError> {
-        let url = format!("{}/repos/{}/{}/issues/{}", self.api_base_url, owner, repo, number);
-        
+    pub async fn fetch_issue(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u32,
+    ) -> Result<Issue, MarkdownError> {
+        let url = format!(
+            "{}/repos/{}/{}/issues/{}",
+            self.api_base_url, owner, repo, number
+        );
+
         let response_text = self.make_api_request(&url).await?;
-        
+
         serde_json::from_str::<Issue>(&response_text).map_err(|e| MarkdownError::ParseError {
-            message: format!("Failed to parse GitHub issue response: {}", e),
+            message: format!("Failed to parse GitHub issue response: {e}"),
         })
     }
 
     /// Fetches all comments for an issue or pull request from GitHub API.
-    pub async fn fetch_comments(&self, owner: &str, repo: &str, number: u32) -> Result<Vec<Comment>, MarkdownError> {
-        let url = format!("{}/repos/{}/{}/issues/{}/comments", self.api_base_url, owner, repo, number);
-        
+    pub async fn fetch_comments(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u32,
+    ) -> Result<Vec<Comment>, MarkdownError> {
+        let url = format!(
+            "{}/repos/{}/{}/issues/{}/comments",
+            self.api_base_url, owner, repo, number
+        );
+
         let response_text = self.make_api_request(&url).await?;
-        
-        serde_json::from_str::<Vec<Comment>>(&response_text).map_err(|e| MarkdownError::ParseError {
-            message: format!("Failed to parse GitHub comments response: {}", e),
+
+        serde_json::from_str::<Vec<Comment>>(&response_text).map_err(|e| {
+            MarkdownError::ParseError {
+                message: format!("Failed to parse GitHub comments response: {e}"),
+            }
         })
     }
 
@@ -463,21 +515,23 @@ impl GitHubConverter {
     async fn make_api_request(&self, url: &str) -> Result<String, MarkdownError> {
         // Create HTTP client with proper headers
         let mut headers = HashMap::new();
-        headers.insert("User-Agent".to_string(), format!("markdowndown/{}", env!("CARGO_PKG_VERSION")));
-        headers.insert("Accept".to_string(), "application/vnd.github.v3+json".to_string());
+        headers.insert(
+            "User-Agent".to_string(),
+            format!("{USER_AGENT_PREFIX}/{}", env!("CARGO_PKG_VERSION")),
+        );
+        headers.insert("Accept".to_string(), GITHUB_API_VERSION.to_string());
 
         // Add authentication header if token is provided
         if let Some(ref token) = self.auth_token {
-            headers.insert("Authorization".to_string(), format!("token {}", token));
+            headers.insert("Authorization".to_string(), format!("token {token}"));
         }
 
-        // Make the request (we'll use the existing HttpClient but would need to add header support)
-        // For now, let's use the basic client and handle auth via URL parameters if needed
-        match self.client.get_text(url).await {
+        // Make the request using the HttpClient with header support
+        match self.client.get_text_with_headers(url, &headers).await {
             Ok(response) => Ok(response),
             Err(MarkdownError::AuthError { message }) => {
                 Err(MarkdownError::AuthError {
-                    message: format!("GitHub API authentication failed: {}. Consider setting GITHUB_TOKEN environment variable.", message)
+                    message: format!("GitHub API authentication failed: {message}. Consider setting GITHUB_TOKEN environment variable.")
                 })
             }
             Err(MarkdownError::NetworkError { message }) => {
@@ -506,8 +560,14 @@ impl GitHubConverter {
 
         // Issue metadata
         markdown.push_str(&format!("**Author:** @{}  \n", issue.user.login));
-        markdown.push_str(&format!("**Created:** {}  \n", issue.created_at.format("%Y-%m-%d %H:%M:%S UTC")));
-        markdown.push_str(&format!("**State:** {}  \n", self.capitalize_first(&issue.state)));
+        markdown.push_str(&format!(
+            "**Created:** {}  \n",
+            issue.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+        markdown.push_str(&format!(
+            "**State:** {}  \n",
+            self.capitalize_first(&issue.state)
+        ));
 
         // Labels
         if !issue.labels.is_empty() {
@@ -543,7 +603,8 @@ impl GitHubConverter {
                     }
                 }
 
-                // TODO: Add reaction support when we implement reaction fetching
+                // Note: Reaction fetching is not yet implemented via GitHub API
+                // but the framework is in place via ReactionCounts struct
                 markdown.push('\n');
             }
         }
@@ -552,15 +613,25 @@ impl GitHubConverter {
     }
 
     /// Builds frontmatter for the GitHub issue/PR.
-    fn build_frontmatter(&self, resource: &GitHubResource, issue: &Issue) -> Result<String, MarkdownError> {
+    fn build_frontmatter(
+        &self,
+        resource: &GitHubResource,
+        issue: &Issue,
+    ) -> Result<String, MarkdownError> {
         let mut builder = FrontmatterBuilder::new(resource.original_url.clone())
             .exporter(format!("markdowndown-github-{}", env!("CARGO_PKG_VERSION")))
             .download_date(Utc::now())
             .additional_field("github_issue_number".to_string(), issue.number.to_string())
-            .additional_field("github_repository".to_string(), format!("{}/{}", resource.owner, resource.repo))
+            .additional_field(
+                "github_repository".to_string(),
+                format!("{}/{}", resource.owner, resource.repo),
+            )
             .additional_field("github_state".to_string(), issue.state.clone())
             .additional_field("github_author".to_string(), issue.user.login.clone())
-            .additional_field("resource_type".to_string(), resource.resource_type.as_str().to_string());
+            .additional_field(
+                "resource_type".to_string(),
+                resource.resource_type.as_str().to_string(),
+            );
 
         // Add labels if present
         if !issue.labels.is_empty() {
@@ -591,6 +662,68 @@ impl Default for GitHubConverter {
 mod tests {
     use super::*;
 
+    /// Creates a test user with default values.
+    fn create_test_user(login: &str, id: u64) -> User {
+        User {
+            login: login.to_string(),
+            id,
+        }
+    }
+
+    /// Creates a test issue with reasonable defaults.
+    fn create_test_issue(
+        number: u32,
+        title: &str,
+        body: Option<&str>,
+        state: &str,
+        user_login: &str,
+        labels: Vec<Label>,
+    ) -> Issue {
+        Issue {
+            number,
+            title: title.to_string(),
+            body: body.map(|s| s.to_string()),
+            state: state.to_string(),
+            user: create_test_user(user_login, 1),
+            created_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            labels,
+            pull_request: None,
+        }
+    }
+
+    /// Creates a test comment with reasonable defaults.
+    fn create_test_comment(
+        id: u64,
+        body: Option<&str>,
+        user_login: &str,
+        created_at: &str,
+    ) -> Comment {
+        Comment {
+            id,
+            body: body.map(|s| s.to_string()),
+            user: create_test_user(user_login, id),
+            created_at: DateTime::parse_from_rfc3339(created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        }
+    }
+
+    /// Creates a test label.
+    fn create_test_label(name: &str, color: &str) -> Label {
+        Label {
+            name: name.to_string(),
+            color: color.to_string(),
+        }
+    }
+
     #[test]
     fn test_resource_type_api_path() {
         assert_eq!(ResourceType::Issue.api_path(), "issues");
@@ -607,7 +740,7 @@ mod tests {
     fn test_github_converter_new() {
         let converter = GitHubConverter::new();
         assert!(converter.auth_token.is_none());
-        assert_eq!(converter.api_base_url, "https://api.github.com");
+        assert_eq!(converter.api_base_url, DEFAULT_GITHUB_API_BASE_URL);
     }
 
     #[test]
@@ -648,7 +781,7 @@ mod tests {
         let converter = GitHubConverter::new();
 
         let invalid_urls = [
-            "https://example.com/user/repo/issues/123",  // Wrong domain
+            "https://example.com/user/repo/issues/123", // Wrong domain
             "https://github.com/user/repo",             // Missing issue/PR part
             "https://github.com/user/repo/issues",      // Missing number
             "https://github.com/user/repo/issues/abc",  // Non-numeric number
@@ -658,7 +791,7 @@ mod tests {
 
         for url in &invalid_urls {
             let result = converter.parse_github_url(url);
-            assert!(result.is_err(), "Should fail for URL: {}", url);
+            assert!(result.is_err(), "Should fail for URL: {url}");
         }
     }
 
@@ -672,11 +805,20 @@ mod tests {
 
     #[test]
     fn test_reaction_counts_with_reactions() {
-        let user = User { login: "test".to_string(), id: 1 };
+        let user = create_test_user("test", 1);
         let reactions = vec![
-            Reaction { content: "+1".to_string(), user: user.clone() },
-            Reaction { content: "+1".to_string(), user: user.clone() },
-            Reaction { content: "laugh".to_string(), user: user.clone() },
+            Reaction {
+                content: "+1".to_string(),
+                user: user.clone(),
+            },
+            Reaction {
+                content: "+1".to_string(),
+                user: user.clone(),
+            },
+            Reaction {
+                content: "laugh".to_string(),
+                user: user.clone(),
+            },
         ];
 
         let counts = ReactionCounts::from_reactions(&reactions);
@@ -700,18 +842,15 @@ mod tests {
     #[test]
     fn test_render_markdown_basic() {
         let converter = GitHubConverter::new();
-        
-        let issue = Issue {
-            number: 123,
-            title: "Test Issue".to_string(),
-            body: Some("This is a test issue body.".to_string()),
-            state: "open".to_string(),
-            user: User { login: "testuser".to_string(), id: 1 },
-            created_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            labels: vec![],
-            pull_request: None,
-        };
+
+        let issue = create_test_issue(
+            123,
+            "Test Issue",
+            Some("This is a test issue body."),
+            "open",
+            "testuser",
+            vec![],
+        );
 
         let comments = vec![];
         let markdown = converter.render_markdown(&issue, &comments);
@@ -725,34 +864,29 @@ mod tests {
     #[test]
     fn test_render_markdown_with_comments() {
         let converter = GitHubConverter::new();
-        
-        let issue = Issue {
-            number: 123,
-            title: "Test Issue".to_string(),
-            body: Some("Issue body".to_string()),
-            state: "closed".to_string(),
-            user: User { login: "author".to_string(), id: 1 },
-            created_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            labels: vec![],
-            pull_request: None,
-        };
+
+        let issue = create_test_issue(
+            123,
+            "Test Issue",
+            Some("Issue body"),
+            "closed",
+            "author",
+            vec![],
+        );
 
         let comments = vec![
-            Comment {
-                id: 1,
-                body: Some("First comment".to_string()),
-                user: User { login: "commenter1".to_string(), id: 2 },
-                created_at: DateTime::parse_from_rfc3339("2023-01-15T11:00:00Z").unwrap().with_timezone(&Utc),
-                updated_at: DateTime::parse_from_rfc3339("2023-01-15T11:00:00Z").unwrap().with_timezone(&Utc),
-            },
-            Comment {
-                id: 2,
-                body: Some("Second comment".to_string()),
-                user: User { login: "commenter2".to_string(), id: 3 },
-                created_at: DateTime::parse_from_rfc3339("2023-01-15T12:00:00Z").unwrap().with_timezone(&Utc),
-                updated_at: DateTime::parse_from_rfc3339("2023-01-15T12:00:00Z").unwrap().with_timezone(&Utc),
-            },
+            create_test_comment(
+                1,
+                Some("First comment"),
+                "commenter1",
+                "2023-01-15T11:00:00Z",
+            ),
+            create_test_comment(
+                2,
+                Some("Second comment"),
+                "commenter2",
+                "2023-01-15T12:00:00Z",
+            ),
         ];
 
         let markdown = converter.render_markdown(&issue, &comments);
@@ -767,21 +901,18 @@ mod tests {
     #[test]
     fn test_render_markdown_with_labels() {
         let converter = GitHubConverter::new();
-        
-        let issue = Issue {
-            number: 123,
-            title: "Bug Report".to_string(),
-            body: Some("Found a bug".to_string()),
-            state: "open".to_string(),
-            user: User { login: "reporter".to_string(), id: 1 },
-            created_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            labels: vec![
-                Label { name: "bug".to_string(), color: "d73a49".to_string() },
-                Label { name: "help wanted".to_string(), color: "008672".to_string() },
+
+        let issue = create_test_issue(
+            123,
+            "Bug Report",
+            Some("Found a bug"),
+            "open",
+            "reporter",
+            vec![
+                create_test_label("bug", "d73a49"),
+                create_test_label("help wanted", "008672"),
             ],
-            pull_request: None,
-        };
+        );
 
         let comments = vec![];
         let markdown = converter.render_markdown(&issue, &comments);
@@ -801,7 +932,7 @@ mod tests {
         let converter = GitHubConverter::new();
         let url = "https://github.com/owner/repo/issues/123#issuecomment-456";
         let result = converter.parse_github_url(url).unwrap();
-        
+
         assert_eq!(result.owner, "owner");
         assert_eq!(result.repo, "repo");
         assert_eq!(result.number, 123);
@@ -813,7 +944,7 @@ mod tests {
         let converter = GitHubConverter::new();
         let url = "https://github.com/owner/repo/pull/456?tab=files";
         let result = converter.parse_github_url(url).unwrap();
-        
+
         assert_eq!(result.owner, "owner");
         assert_eq!(result.repo, "repo");
         assert_eq!(result.number, 456);
@@ -823,18 +954,8 @@ mod tests {
     #[test]
     fn test_render_markdown_empty_body() {
         let converter = GitHubConverter::new();
-        
-        let issue = Issue {
-            number: 123,
-            title: "Empty Issue".to_string(),
-            body: None,
-            state: "open".to_string(),
-            user: User { login: "user".to_string(), id: 1 },
-            created_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339("2023-01-15T10:00:00Z").unwrap().with_timezone(&Utc),
-            labels: vec![],
-            pull_request: None,
-        };
+
+        let issue = create_test_issue(123, "Empty Issue", None, "open", "user", vec![]);
 
         let comments = vec![];
         let markdown = converter.render_markdown(&issue, &comments);

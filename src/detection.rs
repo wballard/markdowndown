@@ -306,10 +306,12 @@ impl UrlDetector {
         // GitHub issue/PR URLs have the pattern: /{owner}/{repo}/issues/{number} or /{owner}/{repo}/pull/{number}
         // Need exactly 4 or more segments: owner, repo, "issues"/"pull", number
         if path_segments.len() >= 4 {
-            if let (Some(resource_segment), Some(number_segment)) = 
-                (path_segments.get(2), path_segments.get(3)) {
-                if (*resource_segment == "issues" || *resource_segment == "pull") 
-                    && number_segment.parse::<u32>().is_ok() {
+            if let (Some(resource_segment), Some(number_segment)) =
+                (path_segments.get(2), path_segments.get(3))
+            {
+                if (*resource_segment == "issues" || *resource_segment == "pull")
+                    && number_segment.parse::<u32>().is_ok()
+                {
                     return true;
                 }
             }

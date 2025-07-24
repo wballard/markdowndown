@@ -59,8 +59,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::detection::UrlDetector;
     use crate::converters::GitHubConverter;
+    use crate::detection::UrlDetector;
     use crate::types::UrlType;
 
     #[test]

@@ -6,6 +6,7 @@
 use crate::types::MarkdownError;
 use bytes::Bytes;
 use reqwest::{Client, Response};
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 use url::Url;
@@ -92,6 +93,138 @@ impl HttpClient {
                 message: format!("Failed to read response body: {e}"),
             })?;
         Ok(bytes)
+    }
+
+    /// Fetches text content from a URL with custom headers and retry logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to fetch content from
+    /// * `headers` - Custom headers to include in the request
+    ///
+    /// # Returns
+    ///
+    /// Returns the response body as a String on success, or a MarkdownError on failure.
+    ///
+    /// # Errors
+    ///
+    /// * `MarkdownError::InvalidUrl` - If the URL is malformed
+    /// * `MarkdownError::NetworkError` - For network-related failures
+    /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
+    pub async fn get_text_with_headers(
+        &self,
+        url: &str,
+        headers: &HashMap<String, String>,
+    ) -> Result<String, MarkdownError> {
+        let response = self.retry_request_with_headers(url, headers).await?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| MarkdownError::NetworkError {
+                message: format!("Failed to read response body: {e}"),
+            })?;
+        Ok(text)
+    }
+
+    /// Internal method to perform HTTP requests with retry logic and custom headers.
+    ///
+    /// Implements exponential backoff for transient failures.
+    async fn retry_request_with_headers(
+        &self,
+        url: &str,
+        headers: &HashMap<String, String>,
+    ) -> Result<Response, MarkdownError> {
+        // Validate URL format
+        let parsed_url = Url::parse(url).map_err(|_| MarkdownError::InvalidUrl {
+            url: url.to_string(),
+        })?;
+
+        // Ensure URL uses HTTP or HTTPS
+        match parsed_url.scheme() {
+            "http" | "https" => {}
+            _ => {
+                return Err(MarkdownError::InvalidUrl {
+                    url: url.to_string(),
+                })
+            }
+        }
+
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            let mut request = self.client.get(url);
+
+            // Add custom headers
+            for (key, value) in headers {
+                request = request.header(key, value);
+            }
+
+            match request.send().await {
+                Ok(response) => {
+                    let status = response.status();
+
+                    // Check if this is a success or non-retryable error
+                    if status.is_success() {
+                        return Ok(response);
+                    } else if status == 401 || status == 403 {
+                        // Auth errors - don't retry
+                        return Err(MarkdownError::AuthError {
+                            message: format!(
+                                "Authentication failed: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
+                        });
+                    } else if status == 404 {
+                        // Not found - don't retry
+                        return Err(MarkdownError::NetworkError {
+                            message: format!(
+                                "HTTP error: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
+                        });
+                    } else if status.is_server_error() || status == 429 {
+                        // Server errors and rate limiting - these are retryable
+                        if attempt == self.max_retries {
+                            return Err(MarkdownError::NetworkError {
+                                message: format!(
+                                    "HTTP error: {} {}",
+                                    status.as_u16(),
+                                    status.canonical_reason().unwrap_or("Unknown")
+                                ),
+                            });
+                        }
+                        // Fall through to retry logic
+                    } else {
+                        // Other client errors - don't retry
+                        return Err(MarkdownError::NetworkError {
+                            message: format!(
+                                "HTTP error: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
+                        });
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(e);
+
+                    // Don't retry on the last attempt
+                    if attempt == self.max_retries {
+                        break;
+                    }
+                }
+            }
+
+            // Calculate delay with exponential backoff
+            let delay = self.base_delay * 2_u32.pow(attempt);
+            sleep(delay).await;
+        }
+
+        // If we reach here, all attempts failed with network errors
+        let error = last_error.unwrap();
+        Err(self.map_reqwest_error(error))
     }
 
     /// Internal method to perform HTTP requests with retry logic.

@@ -10,5 +10,5 @@ pub mod html;
 pub mod github;
 
 // Re-export main converter types for convenience
-pub use html::HtmlConverter;
 pub use github::GitHubConverter;
+pub use html::HtmlConverter;

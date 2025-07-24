@@ -34,7 +34,7 @@ pub mod placeholder;
 pub use config::HtmlConverterConfig;
 pub use converter::{Converter, ConverterRegistry};
 pub use github::GitHubConverter;
-pub use html::HtmlConverter;
 pub use google_docs::GoogleDocsConverter;
+pub use html::HtmlConverter;
 pub use office365::{Office365Config, Office365Converter};
 pub use placeholder::GitHubIssueConverter;

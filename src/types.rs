@@ -361,9 +361,141 @@ impl fmt::Display for UrlType {
     }
 }
 
+/// Error context providing detailed information about where and how an error occurred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ErrorContext {
+    /// The URL being processed when the error occurred
+    pub url: String,
+    /// The operation being performed (e.g., "URL detection", "Document download")  
+    pub operation: String,
+    /// The converter type being used (e.g., "GoogleDocsConverter", "GitHubConverter")
+    pub converter_type: String,
+    /// When the error occurred
+    pub timestamp: DateTime<Utc>,
+    /// Additional contextual information
+    pub additional_info: Option<String>,
+}
+
+impl ErrorContext {
+    /// Creates a new error context with the specified details.
+    pub fn new(
+        url: impl Into<String>,
+        operation: impl Into<String>,
+        converter_type: impl Into<String>,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            operation: operation.into(),
+            converter_type: converter_type.into(),
+            timestamp: Utc::now(),
+            additional_info: None,
+        }
+    }
+
+    /// Adds additional contextual information to the error context.
+    pub fn with_info(mut self, info: impl Into<String>) -> Self {
+        self.additional_info = Some(info.into());
+        self
+    }
+}
+
+/// Validation error kinds for input validation failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidationErrorKind {
+    InvalidUrl,
+    InvalidFormat,
+    MissingParameter,
+}
+
+/// Network error kinds for connection and communication failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NetworkErrorKind {
+    Timeout,
+    ConnectionFailed,
+    DnsResolution,
+    RateLimited,
+    ServerError(u16),
+}
+
+/// Authentication error kinds for authorization failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthErrorKind {
+    MissingToken,
+    InvalidToken,
+    PermissionDenied,
+    TokenExpired,
+}
+
+/// Content error kinds for data processing failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ContentErrorKind {
+    EmptyContent,
+    UnsupportedFormat,
+    ParsingFailed,
+}
+
+/// Converter error kinds for external tool and processing failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConverterErrorKind {
+    ExternalToolFailed,
+    ProcessingError,
+    UnsupportedOperation,
+}
+
+/// Configuration error kinds for setup and configuration failures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConfigErrorKind {
+    InvalidConfig,
+    MissingDependency,
+    InvalidValue,
+}
+
 /// Error types for the markdowndown library.
 #[derive(Debug, Error)]
 pub enum MarkdownError {
+    /// Validation errors for invalid input
+    #[error("Validation error: {kind:?} - {context:?}")]
+    ValidationError {
+        kind: ValidationErrorKind,
+        context: ErrorContext,
+    },
+
+    /// Enhanced network-related errors with detailed context
+    #[error("Network error: {kind:?} - {context:?}")]
+    EnhancedNetworkError {
+        kind: NetworkErrorKind,
+        context: ErrorContext,
+    },
+
+    /// Authentication and authorization errors
+    #[error("Authentication error: {kind:?} - {context:?}")]
+    AuthenticationError {
+        kind: AuthErrorKind,
+        context: ErrorContext,
+    },
+
+    /// Content processing and parsing errors
+    #[error("Content error: {kind:?} - {context:?}")]
+    ContentError {
+        kind: ContentErrorKind,
+        context: ErrorContext,
+    },
+
+    /// Converter-specific processing errors
+    #[error("Converter error: {kind:?} - {context:?}")]
+    ConverterError {
+        kind: ConverterErrorKind,
+        context: ErrorContext,
+    },
+
+    /// Configuration and system setup errors
+    #[error("Configuration error: {kind:?} - {context:?}")]
+    ConfigurationError {
+        kind: ConfigErrorKind,
+        context: ErrorContext,
+    },
+
+    // Legacy error types for backward compatibility - keep the exact same names and structures
     /// Network-related errors
     #[error("Network error: {message}")]
     NetworkError { message: String },
@@ -380,9 +512,190 @@ pub enum MarkdownError {
     #[error("Authentication error: {message}")]
     AuthError { message: String },
 
-    /// Configuration or system capability errors
+    /// Legacy configuration errors - renamed to avoid conflicts
     #[error("Configuration error: {message}")]
-    ConfigurationError { message: String },
+    LegacyConfigurationError { message: String },
+}
+
+impl MarkdownError {
+    /// Returns the error context if available.
+    pub fn context(&self) -> Option<&ErrorContext> {
+        match self {
+            MarkdownError::ValidationError { context, .. } => Some(context),
+            MarkdownError::EnhancedNetworkError { context, .. } => Some(context),
+            MarkdownError::AuthenticationError { context, .. } => Some(context),
+            MarkdownError::ContentError { context, .. } => Some(context),
+            MarkdownError::ConverterError { context, .. } => Some(context),
+            MarkdownError::ConfigurationError { context, .. } => Some(context),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this error is potentially retryable.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            MarkdownError::EnhancedNetworkError { kind, .. } => match kind {
+                NetworkErrorKind::Timeout => true,
+                NetworkErrorKind::ConnectionFailed => true,
+                NetworkErrorKind::DnsResolution => false,
+                NetworkErrorKind::RateLimited => true,
+                NetworkErrorKind::ServerError(status) => *status >= 500,
+            },
+            MarkdownError::AuthenticationError {
+                kind: AuthErrorKind::TokenExpired,
+                ..
+            } => true,
+            // Legacy network errors - use simple heuristics based on message content
+            MarkdownError::NetworkError { message } => {
+                message.contains("timeout")
+                    || message.contains("connection")
+                    || message.contains("rate limit")
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns true if recovery strategies should be attempted.
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            MarkdownError::EnhancedNetworkError { .. } => true,
+            MarkdownError::AuthenticationError { .. } => true,
+            MarkdownError::ConverterError { .. } => true,
+            MarkdownError::ContentError {
+                kind: ContentErrorKind::UnsupportedFormat,
+                ..
+            } => true,
+            // Legacy errors are considered recoverable for network and auth issues
+            MarkdownError::NetworkError { .. } => true,
+            MarkdownError::AuthError { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// Returns user-friendly suggestions for resolving this error.
+    pub fn suggestions(&self) -> Vec<String> {
+        match self {
+            MarkdownError::ValidationError { kind, .. } => match kind {
+                ValidationErrorKind::InvalidUrl => vec![
+                    "Ensure the URL starts with http:// or https://".to_string(),
+                    "Check that the URL is complete and properly formatted".to_string(),
+                    "Try copying the URL directly from your browser".to_string(),
+                ],
+                ValidationErrorKind::InvalidFormat => {
+                    vec!["Verify the input format matches the expected pattern".to_string()]
+                }
+                ValidationErrorKind::MissingParameter => {
+                    vec!["Check that all required parameters are provided".to_string()]
+                }
+            },
+            MarkdownError::EnhancedNetworkError { kind, .. } => match kind {
+                NetworkErrorKind::Timeout => vec![
+                    "Check your internet connection".to_string(),
+                    "Try again in a few minutes".to_string(),
+                    "Consider increasing the timeout in configuration".to_string(),
+                ],
+                NetworkErrorKind::ConnectionFailed => vec![
+                    "Verify the server is accessible".to_string(),
+                    "Check if you're behind a firewall or proxy".to_string(),
+                ],
+                NetworkErrorKind::DnsResolution => vec![
+                    "Check that the domain name is correct".to_string(),
+                    "Try using a different DNS server".to_string(),
+                ],
+                NetworkErrorKind::RateLimited => vec![
+                    "Wait before making additional requests".to_string(),
+                    "Consider authenticating to increase rate limits".to_string(),
+                ],
+                NetworkErrorKind::ServerError(_) => vec![
+                    "The server is experiencing issues".to_string(),
+                    "Try again later".to_string(),
+                ],
+            },
+            MarkdownError::AuthenticationError { kind, .. } => match kind {
+                AuthErrorKind::MissingToken => vec![
+                    "Set up authentication credentials".to_string(),
+                    "Check the documentation for authentication requirements".to_string(),
+                ],
+                AuthErrorKind::InvalidToken => vec![
+                    "Verify your authentication token is correct".to_string(),
+                    "Generate a new token if the current one is invalid".to_string(),
+                ],
+                AuthErrorKind::PermissionDenied => vec![
+                    "Ensure you have permission to access this resource".to_string(),
+                    "Check that your token has the required scopes".to_string(),
+                ],
+                AuthErrorKind::TokenExpired => {
+                    vec!["Refresh or regenerate your authentication token".to_string()]
+                }
+            },
+            MarkdownError::ContentError { kind, .. } => match kind {
+                ContentErrorKind::EmptyContent => vec![
+                    "Verify the source contains actual content".to_string(),
+                    "Check if the URL is publicly accessible".to_string(),
+                ],
+                ContentErrorKind::UnsupportedFormat => vec![
+                    "Try using a different converter for this content type".to_string(),
+                    "Check if the content format is supported".to_string(),
+                ],
+                ContentErrorKind::ParsingFailed => vec![
+                    "The content format may be corrupted or unsupported".to_string(),
+                    "Try accessing the content directly to verify it's valid".to_string(),
+                ],
+            },
+            MarkdownError::ConverterError { kind, .. } => match kind {
+                ConverterErrorKind::ExternalToolFailed => vec![
+                    "Check that required external tools are installed".to_string(),
+                    "Verify tool dependencies and PATH configuration".to_string(),
+                ],
+                ConverterErrorKind::ProcessingError => vec![
+                    "Try again with different converter settings".to_string(),
+                    "Check if the input format is supported".to_string(),
+                ],
+                ConverterErrorKind::UnsupportedOperation => vec![
+                    "This operation is not supported for this content type".to_string(),
+                    "Try using a different converter or approach".to_string(),
+                ],
+            },
+            MarkdownError::ConfigurationError { kind, .. } => match kind {
+                ConfigErrorKind::InvalidConfig => vec![
+                    "Check your configuration file for syntax errors".to_string(),
+                    "Verify all configuration values are valid".to_string(),
+                ],
+                ConfigErrorKind::MissingDependency => vec![
+                    "Install the required dependencies".to_string(),
+                    "Check the documentation for setup requirements".to_string(),
+                ],
+                ConfigErrorKind::InvalidValue => vec![
+                    "Check that configuration values are within valid ranges".to_string(),
+                    "Refer to documentation for valid configuration options".to_string(),
+                ],
+            },
+            // Legacy error suggestions
+            MarkdownError::NetworkError { .. } => vec![
+                "Check your internet connection".to_string(),
+                "Try again in a few minutes".to_string(),
+                "The server may be experiencing issues".to_string(),
+            ],
+            MarkdownError::ParseError { .. } => vec![
+                "Verify the content format is supported".to_string(),
+                "Check if the source content is valid".to_string(),
+            ],
+            MarkdownError::InvalidUrl { .. } => vec![
+                "Ensure the URL starts with http:// or https://".to_string(),
+                "Check that the URL is complete and properly formatted".to_string(),
+                "Try copying the URL directly from your browser".to_string(),
+            ],
+            MarkdownError::AuthError { .. } => vec![
+                "Check your authentication credentials".to_string(),
+                "Verify that your token has the required permissions".to_string(),
+                "Consider regenerating your authentication token".to_string(),
+            ],
+            MarkdownError::LegacyConfigurationError { .. } => vec![
+                "Check your configuration file for errors".to_string(),
+                "Verify all configuration values are valid".to_string(),
+            ],
+        }
+    }
 }
 
 /// Frontmatter structure for document metadata.
@@ -879,6 +1192,372 @@ mod tests {
                     content,
                     "Display should match original"
                 );
+            }
+        }
+
+        /// Tests for the enhanced error handling system
+        mod enhanced_error_handling_tests {
+            use super::*;
+
+            #[test]
+            fn test_error_context_creation() {
+                let context = ErrorContext::new(
+                    "https://example.com/test",
+                    "URL validation",
+                    "TestConverter",
+                );
+
+                assert_eq!(context.url, "https://example.com/test");
+                assert_eq!(context.operation, "URL validation");
+                assert_eq!(context.converter_type, "TestConverter");
+                assert!(context.additional_info.is_none());
+                // Timestamp should be recent (within last few seconds)
+                let now = Utc::now();
+                let diff = (now - context.timestamp).num_seconds();
+                assert!(diff >= 0 && diff < 5);
+            }
+
+            #[test]
+            fn test_error_context_with_info() {
+                let context = ErrorContext::new(
+                    "https://example.com/test",
+                    "URL validation",
+                    "TestConverter",
+                )
+                .with_info("Additional debugging info");
+
+                assert_eq!(
+                    context.additional_info,
+                    Some("Additional debugging info".to_string())
+                );
+            }
+
+            #[test]
+            fn test_validation_error_creation() {
+                let context = ErrorContext::new("invalid-url", "URL parsing", "UrlValidator");
+
+                let error = MarkdownError::ValidationError {
+                    kind: ValidationErrorKind::InvalidUrl,
+                    context: context.clone(),
+                };
+
+                assert_eq!(error.context(), Some(&context));
+                assert!(!error.is_retryable());
+                assert!(!error.is_recoverable());
+
+                let suggestions = error.suggestions();
+                assert!(suggestions
+                    .contains(&"Ensure the URL starts with http:// or https://".to_string()));
+            }
+
+            #[test]
+            fn test_network_error_retryable() {
+                let context =
+                    ErrorContext::new("https://example.com", "HTTP request", "HttpClient");
+
+                // Test retryable network errors
+                let timeout_error = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::Timeout,
+                    context: context.clone(),
+                };
+                assert!(timeout_error.is_retryable());
+                assert!(timeout_error.is_recoverable());
+
+                let connection_error = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::ConnectionFailed,
+                    context: context.clone(),
+                };
+                assert!(connection_error.is_retryable());
+
+                let rate_limit_error = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::RateLimited,
+                    context: context.clone(),
+                };
+                assert!(rate_limit_error.is_retryable());
+
+                // Test non-retryable network errors
+                let dns_error = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::DnsResolution,
+                    context: context.clone(),
+                };
+                assert!(!dns_error.is_retryable());
+
+                // Test server errors - 5xx should be retryable, 4xx should not
+                let server_error_500 = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::ServerError(500),
+                    context: context.clone(),
+                };
+                assert!(server_error_500.is_retryable());
+
+                let client_error_404 = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::ServerError(404),
+                    context,
+                };
+                assert!(!client_error_404.is_retryable());
+            }
+
+            #[test]
+            fn test_auth_error_retryable() {
+                let context =
+                    ErrorContext::new("https://api.example.com", "API request", "ApiClient");
+
+                // Only expired tokens should be retryable
+                let expired_token_error = MarkdownError::AuthenticationError {
+                    kind: AuthErrorKind::TokenExpired,
+                    context: context.clone(),
+                };
+                assert!(expired_token_error.is_retryable());
+                assert!(expired_token_error.is_recoverable());
+
+                let missing_token_error = MarkdownError::AuthenticationError {
+                    kind: AuthErrorKind::MissingToken,
+                    context: context.clone(),
+                };
+                assert!(!missing_token_error.is_retryable());
+                assert!(missing_token_error.is_recoverable());
+
+                let invalid_token_error = MarkdownError::AuthenticationError {
+                    kind: AuthErrorKind::InvalidToken,
+                    context: context.clone(),
+                };
+                assert!(!invalid_token_error.is_retryable());
+
+                let permission_denied_error = MarkdownError::AuthenticationError {
+                    kind: AuthErrorKind::PermissionDenied,
+                    context,
+                };
+                assert!(!permission_denied_error.is_retryable());
+            }
+
+            #[test]
+            fn test_content_error_recovery() {
+                let context = ErrorContext::new(
+                    "https://example.com/document",
+                    "Content parsing",
+                    "ContentParser",
+                );
+
+                // Unsupported format should be recoverable
+                let unsupported_format_error = MarkdownError::ContentError {
+                    kind: ContentErrorKind::UnsupportedFormat,
+                    context: context.clone(),
+                };
+                assert!(unsupported_format_error.is_recoverable());
+                assert!(!unsupported_format_error.is_retryable());
+
+                // Empty content and parsing failed should not be recoverable
+                let empty_content_error = MarkdownError::ContentError {
+                    kind: ContentErrorKind::EmptyContent,
+                    context: context.clone(),
+                };
+                assert!(!empty_content_error.is_recoverable());
+
+                let parsing_failed_error = MarkdownError::ContentError {
+                    kind: ContentErrorKind::ParsingFailed,
+                    context,
+                };
+                assert!(!parsing_failed_error.is_recoverable());
+            }
+
+            #[test]
+            fn test_converter_error_recovery() {
+                let context = ErrorContext::new(
+                    "https://example.com/document",
+                    "Document conversion",
+                    "PandocConverter",
+                );
+
+                let converter_error = MarkdownError::ConverterError {
+                    kind: ConverterErrorKind::ExternalToolFailed,
+                    context,
+                };
+                assert!(converter_error.is_recoverable());
+                assert!(!converter_error.is_retryable());
+            }
+
+            #[test]
+            fn test_configuration_error_recovery() {
+                let context = ErrorContext::new(
+                    "file://config.yaml",
+                    "Configuration loading",
+                    "ConfigLoader",
+                );
+
+                let config_error = MarkdownError::ConfigurationError {
+                    kind: ConfigErrorKind::InvalidConfig,
+                    context,
+                };
+                assert!(!config_error.is_recoverable());
+                assert!(!config_error.is_retryable());
+            }
+
+            #[test]
+            fn test_error_suggestions_comprehensive() {
+                let context =
+                    ErrorContext::new("https://example.com", "Test operation", "TestConverter");
+
+                // Test validation error suggestions
+                let validation_error = MarkdownError::ValidationError {
+                    kind: ValidationErrorKind::InvalidUrl,
+                    context: context.clone(),
+                };
+                let suggestions = validation_error.suggestions();
+                assert!(!suggestions.is_empty());
+                assert!(suggestions.iter().any(|s| s.contains("http")));
+
+                // Test network error suggestions
+                let network_error = MarkdownError::EnhancedNetworkError {
+                    kind: NetworkErrorKind::Timeout,
+                    context: context.clone(),
+                };
+                let suggestions = network_error.suggestions();
+                assert!(suggestions
+                    .iter()
+                    .any(|s| s.contains("internet connection")));
+
+                // Test auth error suggestions
+                let auth_error = MarkdownError::AuthenticationError {
+                    kind: AuthErrorKind::MissingToken,
+                    context: context.clone(),
+                };
+                let suggestions = auth_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("authentication")));
+
+                // Test content error suggestions
+                let content_error = MarkdownError::ContentError {
+                    kind: ContentErrorKind::EmptyContent,
+                    context: context.clone(),
+                };
+                let suggestions = content_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("content")));
+
+                // Test converter error suggestions
+                let converter_error = MarkdownError::ConverterError {
+                    kind: ConverterErrorKind::ExternalToolFailed,
+                    context: context.clone(),
+                };
+                let suggestions = converter_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("external tools")));
+
+                // Test configuration error suggestions
+                let config_error = MarkdownError::ConfigurationError {
+                    kind: ConfigErrorKind::InvalidConfig,
+                    context,
+                };
+                let suggestions = config_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("configuration")));
+            }
+
+            #[test]
+            fn test_legacy_error_compatibility() {
+                // Test that legacy errors still work but don't have enhanced features
+                let legacy_parse_error = MarkdownError::ParseError {
+                    message: "Legacy parsing failed".to_string(),
+                };
+
+                assert!(legacy_parse_error.context().is_none());
+                assert!(!legacy_parse_error.is_retryable());
+                assert!(!legacy_parse_error.is_recoverable());
+
+                let suggestions = legacy_parse_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("content format")));
+
+                // Test legacy network error
+                let legacy_network_error = MarkdownError::NetworkError {
+                    message: "Connection timeout occurred".to_string(),
+                };
+
+                assert!(legacy_network_error.context().is_none());
+                assert!(legacy_network_error.is_retryable()); // Should detect "timeout" in message
+                assert!(legacy_network_error.is_recoverable());
+
+                let suggestions = legacy_network_error.suggestions();
+                assert!(suggestions
+                    .iter()
+                    .any(|s| s.contains("internet connection")));
+
+                // Test legacy invalid URL error
+                let legacy_url_error = MarkdownError::InvalidUrl {
+                    url: "not-a-url".to_string(),
+                };
+
+                assert!(legacy_url_error.context().is_none());
+                assert!(!legacy_url_error.is_retryable());
+                assert!(!legacy_url_error.is_recoverable());
+
+                let suggestions = legacy_url_error.suggestions();
+                assert!(suggestions.iter().any(|s| s.contains("http")));
+            }
+
+            #[test]
+            fn test_error_display_format() {
+                let context = ErrorContext::new(
+                    "https://example.com/test",
+                    "Test operation",
+                    "TestConverter",
+                );
+
+                let error = MarkdownError::ValidationError {
+                    kind: ValidationErrorKind::InvalidUrl,
+                    context,
+                };
+
+                let error_string = format!("{}", error);
+                assert!(error_string.contains("Validation error"));
+                assert!(error_string.contains("InvalidUrl"));
+            }
+
+            #[test]
+            fn test_error_context_serialization() {
+                let context = ErrorContext::new(
+                    "https://example.com/test",
+                    "Test operation",
+                    "TestConverter",
+                )
+                .with_info("Additional context");
+
+                // Test that ErrorContext can be serialized/deserialized
+                let yaml = serde_yaml::to_string(&context).unwrap();
+                let deserialized: ErrorContext = serde_yaml::from_str(&yaml).unwrap();
+
+                assert_eq!(context.url, deserialized.url);
+                assert_eq!(context.operation, deserialized.operation);
+                assert_eq!(context.converter_type, deserialized.converter_type);
+                assert_eq!(context.additional_info, deserialized.additional_info);
+            }
+
+            #[test]
+            fn test_error_kind_serialization() {
+                // Test that all error kinds can be serialized/deserialized
+                let validation_kind = ValidationErrorKind::InvalidUrl;
+                let yaml = serde_yaml::to_string(&validation_kind).unwrap();
+                let deserialized: ValidationErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(validation_kind, deserialized);
+
+                let network_kind = NetworkErrorKind::ServerError(500);
+                let yaml = serde_yaml::to_string(&network_kind).unwrap();
+                let deserialized: NetworkErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(network_kind, deserialized);
+
+                let auth_kind = AuthErrorKind::TokenExpired;
+                let yaml = serde_yaml::to_string(&auth_kind).unwrap();
+                let deserialized: AuthErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(auth_kind, deserialized);
+
+                let content_kind = ContentErrorKind::ParsingFailed;
+                let yaml = serde_yaml::to_string(&content_kind).unwrap();
+                let deserialized: ContentErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(content_kind, deserialized);
+
+                let converter_kind = ConverterErrorKind::ExternalToolFailed;
+                let yaml = serde_yaml::to_string(&converter_kind).unwrap();
+                let deserialized: ConverterErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(converter_kind, deserialized);
+
+                let config_kind = ConfigErrorKind::MissingDependency;
+                let yaml = serde_yaml::to_string(&config_kind).unwrap();
+                let deserialized: ConfigErrorKind = serde_yaml::from_str(&yaml).unwrap();
+                assert_eq!(config_kind, deserialized);
             }
         }
     }

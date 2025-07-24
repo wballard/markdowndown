@@ -187,10 +187,7 @@ impl FrontmatterBuilder {
         let mut yaml_content =
             serde_yaml::to_string(&frontmatter).map_err(|e| MarkdownError::ParseError {
                 message: format!(
-                    "Failed to serialize frontmatter to YAML (source URL: {}, {} additional fields): {}",
-                    source_url_str,
-                    additional_fields_count,
-                    e
+                    "Failed to serialize frontmatter to YAML (source URL: {source_url_str}, {additional_fields_count} additional fields): {e}"
                 ),
             })?;
 
@@ -218,9 +215,7 @@ impl FrontmatterBuilder {
             yaml_content =
                 serde_yaml::to_string(&yaml_value).map_err(|e| MarkdownError::ParseError {
                     message: format!(
-                        "Failed to serialize extended frontmatter to YAML ({} additional fields added): {}",
-                        additional_fields_count,
-                        e
+                        "Failed to serialize extended frontmatter to YAML ({additional_fields_count} additional fields added): {e}"
                     ),
                 })?;
         }

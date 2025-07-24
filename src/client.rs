@@ -4,12 +4,15 @@
 //! and proper error mapping for the markdowndown library.
 
 use crate::config::{AuthConfig, HttpConfig};
-use crate::types::MarkdownError;
+use crate::types::{
+    AuthErrorKind, ErrorContext, MarkdownError, NetworkErrorKind, ValidationErrorKind,
+};
 use bytes::Bytes;
 use reqwest::{Client, Response};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
+use tracing::{debug, error, info, instrument};
 use url::Url;
 
 /// HTTP client configuration with retry logic and error handling.
@@ -79,14 +82,23 @@ impl HttpClient {
     /// * `MarkdownError::InvalidUrl` - If the URL is malformed
     /// * `MarkdownError::NetworkError` - For network-related failures
     /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
+    #[instrument(skip(self))]
     pub async fn get_text(&self, url: &str) -> Result<String, MarkdownError> {
+        debug!("Fetching text content from URL");
         let response = self.retry_request(url).await?;
-        let text = response
-            .text()
-            .await
-            .map_err(|e| MarkdownError::NetworkError {
-                message: format!("Failed to read response body: {e}"),
-            })?;
+
+        debug!("Reading response body as text");
+        let text = response.text().await.map_err(|e| {
+            error!("Failed to read response body: {}", e);
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
+
+        info!("Successfully fetched text content ({} chars)", text.len());
         Ok(text)
     }
 
@@ -107,12 +119,14 @@ impl HttpClient {
     /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
     pub async fn get_bytes(&self, url: &str) -> Result<Bytes, MarkdownError> {
         let response = self.retry_request(url).await?;
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| MarkdownError::NetworkError {
-                message: format!("Failed to read response body: {e}"),
-            })?;
+        let bytes = response.bytes().await.map_err(|e| {
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
         Ok(bytes)
     }
 
@@ -138,12 +152,14 @@ impl HttpClient {
         headers: &HashMap<String, String>,
     ) -> Result<String, MarkdownError> {
         let response = self.retry_request_with_headers(url, headers).await?;
-        let text = response
-            .text()
-            .await
-            .map_err(|e| MarkdownError::NetworkError {
-                message: format!("Failed to read response body: {e}"),
-            })?;
+        let text = response.text().await.map_err(|e| {
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
         Ok(text)
     }
 
@@ -156,17 +172,24 @@ impl HttpClient {
         headers: &HashMap<String, String>,
     ) -> Result<Response, MarkdownError> {
         // Validate URL format
-        let parsed_url = Url::parse(url).map_err(|_| MarkdownError::InvalidUrl {
-            url: url.to_string(),
+        let parsed_url = Url::parse(url).map_err(|_| {
+            let context = ErrorContext::new(url, "URL validation", "HttpClient");
+            MarkdownError::ValidationError {
+                kind: ValidationErrorKind::InvalidUrl,
+                context,
+            }
         })?;
 
         // Ensure URL uses HTTP or HTTPS
         match parsed_url.scheme() {
             "http" | "https" => {}
             _ => {
-                return Err(MarkdownError::InvalidUrl {
-                    url: url.to_string(),
-                })
+                let context = ErrorContext::new(url, "URL scheme validation", "HttpClient")
+                    .with_info(format!("Unsupported scheme: {}", parsed_url.scheme()));
+                return Err(MarkdownError::ValidationError {
+                    kind: ValidationErrorKind::InvalidUrl,
+                    context,
+                });
             }
         }
 
@@ -189,42 +212,52 @@ impl HttpClient {
                         return Ok(response);
                     } else if status == 401 || status == 403 {
                         // Auth errors - don't retry
-                        return Err(MarkdownError::AuthError {
-                            message: format!(
-                                "Authentication failed: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let auth_kind = if status == 401 {
+                            AuthErrorKind::MissingToken
+                        } else {
+                            AuthErrorKind::PermissionDenied
+                        };
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::AuthenticationError {
+                            kind: auth_kind,
+                            context,
                         });
                     } else if status == 404 {
                         // Not found - don't retry
-                        return Err(MarkdownError::NetworkError {
-                            message: format!(
-                                "HTTP error: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::EnhancedNetworkError {
+                            kind: NetworkErrorKind::ServerError(status.as_u16()),
+                            context,
                         });
                     } else if status.is_server_error() || status == 429 {
                         // Server errors and rate limiting - these are retryable
                         if attempt == self.max_retries {
-                            return Err(MarkdownError::NetworkError {
-                                message: format!(
-                                    "HTTP error: {} {}",
-                                    status.as_u16(),
-                                    status.canonical_reason().unwrap_or("Unknown")
-                                ),
+                            let network_kind = if status == 429 {
+                                NetworkErrorKind::RateLimited
+                            } else {
+                                NetworkErrorKind::ServerError(status.as_u16())
+                            };
+                            let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                                .with_info(format!(
+                                    "HTTP status: {} after {} attempts",
+                                    status,
+                                    self.max_retries + 1
+                                ));
+                            return Err(MarkdownError::EnhancedNetworkError {
+                                kind: network_kind,
+                                context,
                             });
                         }
                         // Fall through to retry logic
                     } else {
                         // Other client errors - don't retry
-                        return Err(MarkdownError::NetworkError {
-                            message: format!(
-                                "HTTP error: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::EnhancedNetworkError {
+                            kind: NetworkErrorKind::ServerError(status.as_u16()),
+                            context,
                         });
                     }
                 }
@@ -245,108 +278,135 @@ impl HttpClient {
 
         // If we reach here, all attempts failed with network errors
         let error = last_error.unwrap();
-        Err(self.map_reqwest_error(error))
+        Err(self.map_reqwest_error(error, url))
     }
 
     /// Internal method to perform HTTP requests with retry logic.
     ///
     /// Implements exponential backoff for transient failures.
+    #[instrument(skip(self), fields(attempt, max_retries = self.max_retries))]
     async fn retry_request(&self, url: &str) -> Result<Response, MarkdownError> {
+        debug!("Starting HTTP request with retry logic");
+
         // Validate URL format
-        let parsed_url = Url::parse(url).map_err(|_| MarkdownError::InvalidUrl {
-            url: url.to_string(),
+        let parsed_url = Url::parse(url).map_err(|_| {
+            error!("Invalid URL format: {}", url);
+            let context = ErrorContext::new(url, "URL validation", "HttpClient");
+            MarkdownError::ValidationError {
+                kind: ValidationErrorKind::InvalidUrl,
+                context,
+            }
         })?;
 
         // Ensure URL uses HTTP or HTTPS
         match parsed_url.scheme() {
-            "http" | "https" => {}
-            _ => {
-                return Err(MarkdownError::InvalidUrl {
-                    url: url.to_string(),
-                })
+            "http" | "https" => {
+                debug!("URL scheme validated: {}", parsed_url.scheme());
+            }
+            scheme => {
+                error!("Unsupported URL scheme: {}", scheme);
+                let context = ErrorContext::new(url, "URL scheme validation", "HttpClient")
+                    .with_info(format!("Unsupported scheme: {scheme}"));
+                return Err(MarkdownError::ValidationError {
+                    kind: ValidationErrorKind::InvalidUrl,
+                    context,
+                });
             }
         }
 
         let mut last_error = None;
 
         for attempt in 0..=self.max_retries {
+            tracing::Span::current().record("attempt", attempt);
+            debug!("Attempt {} of {}", attempt + 1, self.max_retries + 1);
             let mut request = self.client.get(url);
 
             // Add authentication headers based on URL domain
             if let Some(github_token) = &self.auth.github_token {
                 if parsed_url
                     .host_str()
-                    .map_or(false, |host| host.contains("github"))
+                    .is_some_and(|host| host.contains("github"))
                 {
-                    request = request.header("Authorization", format!("token {}", github_token));
+                    request = request.header("Authorization", format!("token {github_token}"));
                 }
             }
 
             if let Some(office365_token) = &self.auth.office365_token {
-                if parsed_url.host_str().map_or(false, |host| {
+                if parsed_url.host_str().is_some_and(|host| {
                     host.contains("office.com")
                         || host.contains("sharepoint.com")
                         || host.contains("onedrive.com")
                 }) {
-                    request =
-                        request.header("Authorization", format!("Bearer {}", office365_token));
+                    request = request.header("Authorization", format!("Bearer {office365_token}"));
                 }
             }
 
             if let Some(google_api_key) = &self.auth.google_api_key {
                 if parsed_url
                     .host_str()
-                    .map_or(false, |host| host.contains("googleapis.com"))
+                    .is_some_and(|host| host.contains("googleapis.com"))
                 {
-                    request = request.header("Authorization", format!("Bearer {}", google_api_key));
+                    request = request.header("Authorization", format!("Bearer {google_api_key}"));
                 }
             }
 
             match request.send().await {
                 Ok(response) => {
                     let status = response.status();
+                    debug!("Received HTTP response: {}", status);
 
                     // Check if this is a success or non-retryable error
                     if status.is_success() {
+                        info!("HTTP request successful: {}", status);
                         return Ok(response);
                     } else if status == 401 || status == 403 {
                         // Auth errors - don't retry
-                        return Err(MarkdownError::AuthError {
-                            message: format!(
-                                "Authentication failed: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let auth_kind = if status == 401 {
+                            AuthErrorKind::MissingToken
+                        } else {
+                            AuthErrorKind::PermissionDenied
+                        };
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::AuthenticationError {
+                            kind: auth_kind,
+                            context,
                         });
                     } else if status == 404 {
                         // Not found - don't retry
-                        return Err(MarkdownError::NetworkError {
-                            message: format!(
-                                "HTTP error: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::EnhancedNetworkError {
+                            kind: NetworkErrorKind::ServerError(status.as_u16()),
+                            context,
                         });
                     } else if status.is_server_error() || status == 429 {
                         // Server errors and rate limiting - these are retryable
                         if attempt == self.max_retries {
-                            return Err(MarkdownError::NetworkError {
-                                message: format!(
-                                    "HTTP error: {} {}",
-                                    status.as_u16(),
-                                    status.canonical_reason().unwrap_or("Unknown")
-                                ),
+                            let network_kind = if status == 429 {
+                                NetworkErrorKind::RateLimited
+                            } else {
+                                NetworkErrorKind::ServerError(status.as_u16())
+                            };
+                            let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                                .with_info(format!(
+                                    "HTTP status: {} after {} attempts",
+                                    status,
+                                    self.max_retries + 1
+                                ));
+                            return Err(MarkdownError::EnhancedNetworkError {
+                                kind: network_kind,
+                                context,
                             });
                         }
                         // Fall through to retry logic
                     } else {
                         // Other client errors - don't retry
-                        return Err(MarkdownError::NetworkError {
-                            message: format!(
-                                "HTTP error: {} {}",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown")
-                            ),
+                        let context = ErrorContext::new(url, "HTTP request", "HttpClient")
+                            .with_info(format!("HTTP status: {status}"));
+                        return Err(MarkdownError::EnhancedNetworkError {
+                            kind: NetworkErrorKind::ServerError(status.as_u16()),
+                            context,
                         });
                     }
                 }
@@ -367,29 +427,44 @@ impl HttpClient {
 
         // If we reach here, all attempts failed with network errors
         let error = last_error.unwrap();
-        Err(self.map_reqwest_error(error))
+        Err(self.map_reqwest_error(error, url))
     }
 
-    /// Maps reqwest errors to MarkdownError variants.
-    fn map_reqwest_error(&self, error: reqwest::Error) -> MarkdownError {
+    /// Maps reqwest errors to MarkdownError variants with context.
+    fn map_reqwest_error(&self, error: reqwest::Error, url: &str) -> MarkdownError {
+        let url_from_error = error
+            .url()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| url.to_string());
+
         if error.is_timeout() {
-            MarkdownError::NetworkError {
-                message: "Request timeout".to_string(),
+            let context = ErrorContext::new(&url_from_error, "HTTP request", "HttpClient")
+                .with_info("Request timeout");
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::Timeout,
+                context,
             }
         } else if error.is_connect() {
-            MarkdownError::NetworkError {
-                message: format!("Connection failed: {error}"),
+            let context = ErrorContext::new(&url_from_error, "HTTP request", "HttpClient")
+                .with_info(format!("Connection error: {error}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
             }
         } else if error.is_request() {
-            MarkdownError::InvalidUrl {
-                url: error
-                    .url()
-                    .map(|u| u.to_string())
-                    .unwrap_or_else(|| "unknown".to_string()),
+            let context =
+                ErrorContext::new(&url_from_error, "HTTP request validation", "HttpClient")
+                    .with_info(format!("Request error: {error}"));
+            MarkdownError::ValidationError {
+                kind: ValidationErrorKind::InvalidUrl,
+                context,
             }
         } else {
-            MarkdownError::NetworkError {
-                message: format!("HTTP request failed: {error}"),
+            let context = ErrorContext::new(&url_from_error, "HTTP request", "HttpClient")
+                .with_info(format!("Request failed: {error}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
             }
         }
     }
@@ -463,10 +538,11 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::InvalidUrl { url } => {
-                assert_eq!(url, "not-a-valid-url");
+            MarkdownError::ValidationError { kind, context } => {
+                assert_eq!(kind, ValidationErrorKind::InvalidUrl);
+                assert_eq!(context.url, "not-a-valid-url");
             }
-            _ => panic!("Expected InvalidUrl error"),
+            _ => panic!("Expected ValidationError"),
         }
     }
 
@@ -477,10 +553,11 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::InvalidUrl { url } => {
-                assert_eq!(url, "ftp://example.com/file");
+            MarkdownError::ValidationError { kind, context } => {
+                assert_eq!(kind, ValidationErrorKind::InvalidUrl);
+                assert_eq!(context.url, "ftp://example.com/file");
             }
-            _ => panic!("Expected InvalidUrl error"),
+            _ => panic!("Expected ValidationError"),
         }
     }
 
@@ -502,10 +579,13 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::NetworkError { message } => {
-                assert!(message.contains("404"));
-            }
-            _ => panic!("Expected NetworkError"),
+            MarkdownError::EnhancedNetworkError { kind, context: _ } => match kind {
+                NetworkErrorKind::ServerError(status) => {
+                    assert_eq!(status, 404);
+                }
+                _ => panic!("Expected ServerError(404)"),
+            },
+            _ => panic!("Expected EnhancedNetworkError"),
         }
     }
 
@@ -527,10 +607,10 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::AuthError { message } => {
-                assert!(message.contains("401"));
+            MarkdownError::AuthenticationError { kind, context: _ } => {
+                assert_eq!(kind, AuthErrorKind::MissingToken);
             }
-            _ => panic!("Expected AuthError"),
+            _ => panic!("Expected AuthenticationError"),
         }
     }
 
@@ -552,10 +632,10 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::AuthError { message } => {
-                assert!(message.contains("403"));
+            MarkdownError::AuthenticationError { kind, context: _ } => {
+                assert_eq!(kind, AuthErrorKind::PermissionDenied);
             }
-            _ => panic!("Expected AuthError"),
+            _ => panic!("Expected AuthenticationError"),
         }
     }
 
@@ -610,10 +690,13 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::NetworkError { message } => {
-                assert!(message.contains("500"));
-            }
-            _ => panic!("Expected NetworkError"),
+            MarkdownError::EnhancedNetworkError { kind, context: _ } => match kind {
+                NetworkErrorKind::ServerError(status) => {
+                    assert_eq!(status, 500);
+                }
+                _ => panic!("Expected ServerError(500)"),
+            },
+            _ => panic!("Expected EnhancedNetworkError"),
         }
     }
 

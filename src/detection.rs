@@ -93,7 +93,7 @@ impl Pattern {
         if self.domain_pattern.starts_with("*.") {
             // Wildcard subdomain matching
             let base_domain = &self.domain_pattern[2..];
-            host.ends_with(base_domain) && (host == base_domain || host.ends_with(&format!(".{base_domain}")))
+            host == base_domain || host.ends_with(&format!(".{base_domain}"))
         } else {
             // Exact domain matching
             host == self.domain_pattern
@@ -140,21 +140,33 @@ impl UrlDetector {
             // Google Docs patterns
             Pattern::new("docs.google.com", Some("/document/"), UrlType::GoogleDocs),
             Pattern::new("drive.google.com", Some("/file/"), UrlType::GoogleDocs),
-            
             // Office 365 patterns
             Pattern::new("*.sharepoint.com", None, UrlType::Office365),
             Pattern::new("onedrive.live.com", None, UrlType::Office365),
             Pattern::new("*.office.com", None, UrlType::Office365),
             Pattern::new("outlook.live.com", None, UrlType::Office365),
             Pattern::new("*.outlook.com", None, UrlType::Office365),
-            
             // GitHub patterns (handled separately due to complexity)
         ];
 
         let tracking_params = [
-            "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-            "ref", "source", "campaign", "medium", "term",
-            "gclid", "fbclid", "msclkid", "_ga", "_gid", "mc_cid", "mc_eid",
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "ref",
+            "source",
+            "campaign",
+            "medium",
+            "term",
+            "gclid",
+            "fbclid",
+            "msclkid",
+            "_ga",
+            "_gid",
+            "mc_cid",
+            "mc_eid",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -269,7 +281,7 @@ impl UrlDetector {
     /// Parses a URL string into a parsed URL, handling common issues.
     fn parse_url(&self, url: &str) -> Result<ParsedUrl, MarkdownError> {
         let trimmed = url.trim();
-        
+
         // Basic validation - must be HTTP or HTTPS
         if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
             return Err(MarkdownError::InvalidUrl {
@@ -277,8 +289,8 @@ impl UrlDetector {
             });
         }
 
-        ParsedUrl::parse(trimmed).map_err(|_| MarkdownError::InvalidUrl {
-            url: url.to_string(),
+        ParsedUrl::parse(trimmed).map_err(|parse_error| MarkdownError::ParseError {
+            message: format!("Failed to parse URL '{url}': {parse_error}"),
         })
     }
 
@@ -292,11 +304,14 @@ impl UrlDetector {
         let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
         // GitHub issue URLs have the pattern: /{owner}/{repo}/issues/{number}
-        if path_segments.len() >= 4
-            && path_segments[2] == "issues"
-            && path_segments[3].parse::<u32>().is_ok()
-        {
-            return true;
+        // Need exactly 4 or more segments: owner, repo, "issues", number
+        if path_segments.len() >= 4 {
+            if let (Some(issues_segment), Some(number_segment)) = 
+                (path_segments.get(2), path_segments.get(3)) {
+                if *issues_segment == "issues" && number_segment.parse::<u32>().is_ok() {
+                    return true;
+                }
+            }
         }
 
         false
@@ -323,7 +338,8 @@ mod tests {
     #[test]
     fn test_detect_google_docs_document() {
         let detector = UrlDetector::new();
-        let url = "https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit";
+        let url =
+            "https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit";
         let result = detector.detect_type(url).unwrap();
         assert_eq!(result, UrlType::GoogleDocs);
     }
@@ -424,7 +440,7 @@ mod tests {
     #[test]
     fn test_github_issue_url_detection() {
         let detector = UrlDetector::new();
-        
+
         // Valid GitHub issue URLs
         let valid_urls = [
             "https://github.com/owner/repo/issues/123",
@@ -434,7 +450,7 @@ mod tests {
 
         for url in &valid_urls {
             let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, UrlType::GitHubIssue, "Failed for URL: {}", url);
+            assert_eq!(result, UrlType::GitHubIssue, "Failed for URL: {url}");
         }
 
         // Invalid GitHub URLs (should fall back to HTML)
@@ -447,7 +463,7 @@ mod tests {
 
         for url in &invalid_urls {
             let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, UrlType::Html, "Failed for URL: {}", url);
+            assert_eq!(result, UrlType::Html, "Failed for URL: {url}");
         }
     }
 
@@ -483,7 +499,7 @@ mod tests {
     #[test]
     fn test_invalid_url_error_handling() {
         let detector = UrlDetector::new();
-        
+
         let invalid_urls = [
             "not-a-url",
             "ftp://example.com",
@@ -494,13 +510,13 @@ mod tests {
 
         for url in &invalid_urls {
             let result = detector.detect_type(url);
-            assert!(result.is_err(), "Should fail for URL: {}", url);
-            
+            assert!(result.is_err(), "Should fail for URL: {url}");
+
             match result.unwrap_err() {
                 MarkdownError::InvalidUrl { url: error_url } => {
                     assert_eq!(error_url, *url);
                 }
-                _ => panic!("Expected InvalidUrl error for: {}", url),
+                _ => panic!("Expected InvalidUrl error for: {url}"),
             }
         }
     }

@@ -21,6 +21,9 @@ pub mod types;
 /// HTTP client wrapper for network operations
 pub mod client;
 
+/// Content converters for different formats
+pub mod converters;
+
 /// URL type detection and classification
 pub mod detection {}
 

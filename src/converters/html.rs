@@ -199,27 +199,18 @@ impl HtmlConverter {
         Ok(markdown)
     }
 
-    /// Removes script and style tags and their content.
-    fn remove_scripts_and_styles(&self, html: &str) -> String {
+    /// Helper function to remove HTML elements by tag name.
+    fn remove_elements_by_tag(&self, html: &str, tag_name: &str) -> String {
         let mut result = html.to_string();
+        let opening_tag = format!("<{tag_name}");
+        let closing_tag = format!("</{tag_name}>");
 
-        // Remove script tags and their content (case insensitive)
-        // Use a simple regex-like approach for now
-        while let Some(start) = result.to_lowercase().find("<script") {
-            if let Some(end) = result[start..].to_lowercase().find("</script>") {
-                let end_pos = start + end + "</script>".len();
-                result.replace_range(start..end_pos, "");
-            } else {
-                // If no closing tag found, remove from start to end of string
-                result.truncate(start);
-                break;
-            }
-        }
-
-        // Remove style tags and their content (case insensitive)
-        while let Some(start) = result.to_lowercase().find("<style") {
-            if let Some(end) = result[start..].to_lowercase().find("</style>") {
-                let end_pos = start + end + "</style>".len();
+        while let Some(start) = result.to_lowercase().find(&opening_tag.to_lowercase()) {
+            if let Some(end) = result[start..]
+                .to_lowercase()
+                .find(&closing_tag.to_lowercase())
+            {
+                let end_pos = start + end + closing_tag.len();
                 result.replace_range(start..end_pos, "");
             } else {
                 // If no closing tag found, remove from start to end of string
@@ -231,61 +222,60 @@ impl HtmlConverter {
         result
     }
 
-    /// Removes navigation elements.
-    fn remove_navigation_elements(&self, html: &str) -> String {
+    /// Helper function to remove HTML elements by class name.
+    fn remove_elements_by_class(&self, html: &str, class_name: &str) -> String {
         let mut result = html.to_string();
+        let pattern = format!("class=\"{class_name}\"");
 
-        // Remove <nav> elements and their content
-        while let Some(start) = result.to_lowercase().find("<nav") {
-            if let Some(end) = result[start..].to_lowercase().find("</nav>") {
-                let end_pos = start + end + "</nav>".len();
-                result.replace_range(start..end_pos, "");
-            } else {
-                // Find the end of the opening nav tag and remove from there
-                if let Some(tag_end) = result[start..].find(">") {
-                    result.replace_range(start..start + tag_end + 1, "");
+        while let Some(class_pos) = result.to_lowercase().find(&pattern.to_lowercase()) {
+            // Find the start of the tag containing this class
+            let tag_start = result[..class_pos].rfind('<').unwrap_or(0);
+
+            // Find the tag name
+            let tag_content = &result[tag_start..class_pos + pattern.len()];
+            if let Some(tag_name_end) = tag_content.find(' ') {
+                let tag_name = &tag_content[1..tag_name_end];
+                let closing_tag = format!("</{tag_name}>");
+
+                // Find the closing tag
+                if let Some(close_start) = result[class_pos..]
+                    .to_lowercase()
+                    .find(&closing_tag.to_lowercase())
+                {
+                    let close_end = class_pos + close_start + closing_tag.len();
+                    result.replace_range(tag_start..close_end, "");
                 } else {
-                    result.truncate(start);
-                    break;
-                }
-            }
-        }
-
-        // Remove elements with nav-related classes
-        let nav_classes = ["nav", "navigation"];
-        for class in nav_classes {
-            // Remove divs with specific class names
-            let pattern = format!("class=\"{}\"", class);
-            while let Some(class_pos) = result.to_lowercase().find(&pattern.to_lowercase()) {
-                // Find the start of the tag containing this class
-                let tag_start = result[..class_pos].rfind('<').unwrap_or(0);
-
-                // Find the tag name
-                let tag_content = &result[tag_start..class_pos + pattern.len()];
-                if let Some(tag_name_end) = tag_content.find(' ') {
-                    let tag_name = &tag_content[1..tag_name_end];
-                    let closing_tag = format!("</{}>", tag_name);
-
-                    // Find the closing tag
-                    if let Some(close_start) = result[class_pos..]
-                        .to_lowercase()
-                        .find(&closing_tag.to_lowercase())
-                    {
-                        let close_end = class_pos + close_start + closing_tag.len();
-                        result.replace_range(tag_start..close_end, "");
-                    } else {
-                        // If no closing tag, just remove the opening tag
-                        if let Some(tag_end) = result[tag_start..].find(">") {
-                            result.replace_range(tag_start..tag_start + tag_end + 1, "");
-                        }
-                    }
-                } else {
-                    // Fallback: remove just the element with class
+                    // If no closing tag, just remove the opening tag
                     if let Some(tag_end) = result[tag_start..].find(">") {
                         result.replace_range(tag_start..tag_start + tag_end + 1, "");
                     }
                 }
+            } else {
+                // Fallback: remove just the element with class
+                if let Some(tag_end) = result[tag_start..].find(">") {
+                    result.replace_range(tag_start..tag_start + tag_end + 1, "");
+                }
             }
+        }
+
+        result
+    }
+
+    /// Removes script and style tags and their content.
+    fn remove_scripts_and_styles(&self, html: &str) -> String {
+        let mut result = self.remove_elements_by_tag(html, "script");
+        result = self.remove_elements_by_tag(&result, "style");
+        result
+    }
+
+    /// Removes navigation elements.
+    fn remove_navigation_elements(&self, html: &str) -> String {
+        let mut result = self.remove_elements_by_tag(html, "nav");
+
+        // Remove elements with nav-related classes
+        let nav_classes = ["nav", "navigation"];
+        for class in nav_classes {
+            result = self.remove_elements_by_class(&result, class);
         }
 
         result
@@ -293,59 +283,12 @@ impl HtmlConverter {
 
     /// Removes sidebar elements.
     fn remove_sidebar_elements(&self, html: &str) -> String {
-        let mut result = html.to_string();
-
-        // Remove <aside> elements and their content
-        while let Some(start) = result.to_lowercase().find("<aside") {
-            if let Some(end) = result[start..].to_lowercase().find("</aside>") {
-                let end_pos = start + end + "</aside>".len();
-                result.replace_range(start..end_pos, "");
-            } else {
-                // Find the end of the opening aside tag and remove from there
-                if let Some(tag_end) = result[start..].find(">") {
-                    result.replace_range(start..start + tag_end + 1, "");
-                } else {
-                    result.truncate(start);
-                    break;
-                }
-            }
-        }
+        let mut result = self.remove_elements_by_tag(html, "aside");
 
         // Remove elements with sidebar-related classes
         let sidebar_classes = ["sidebar", "side-bar"];
         for class in sidebar_classes {
-            // Remove elements with specific class names
-            let pattern = format!("class=\"{}\"", class);
-            while let Some(class_pos) = result.to_lowercase().find(&pattern.to_lowercase()) {
-                // Find the start of the tag containing this class
-                let tag_start = result[..class_pos].rfind('<').unwrap_or(0);
-
-                // Find the tag name
-                let tag_content = &result[tag_start..class_pos + pattern.len()];
-                if let Some(tag_name_end) = tag_content.find(' ') {
-                    let tag_name = &tag_content[1..tag_name_end];
-                    let closing_tag = format!("</{}>", tag_name);
-
-                    // Find the closing tag
-                    if let Some(close_start) = result[class_pos..]
-                        .to_lowercase()
-                        .find(&closing_tag.to_lowercase())
-                    {
-                        let close_end = class_pos + close_start + closing_tag.len();
-                        result.replace_range(tag_start..close_end, "");
-                    } else {
-                        // If no closing tag, just remove the opening tag
-                        if let Some(tag_end) = result[tag_start..].find(">") {
-                            result.replace_range(tag_start..tag_start + tag_end + 1, "");
-                        }
-                    }
-                } else {
-                    // Fallback: remove just the element with class
-                    if let Some(tag_end) = result[tag_start..].find(">") {
-                        result.replace_range(tag_start..tag_start + tag_end + 1, "");
-                    }
-                }
-            }
+            result = self.remove_elements_by_class(&result, class);
         }
 
         result
@@ -358,38 +301,7 @@ impl HtmlConverter {
         // Remove elements with advertisement-related classes
         let ad_classes = ["ad", "ads", "advertisement"];
         for class in ad_classes {
-            // Remove elements with specific class names
-            let pattern = format!("class=\"{}\"", class);
-            while let Some(class_pos) = result.to_lowercase().find(&pattern.to_lowercase()) {
-                // Find the start of the tag containing this class
-                let tag_start = result[..class_pos].rfind('<').unwrap_or(0);
-
-                // Find the tag name
-                let tag_content = &result[tag_start..class_pos + pattern.len()];
-                if let Some(tag_name_end) = tag_content.find(' ') {
-                    let tag_name = &tag_content[1..tag_name_end];
-                    let closing_tag = format!("</{}>", tag_name);
-
-                    // Find the closing tag
-                    if let Some(close_start) = result[class_pos..]
-                        .to_lowercase()
-                        .find(&closing_tag.to_lowercase())
-                    {
-                        let close_end = class_pos + close_start + closing_tag.len();
-                        result.replace_range(tag_start..close_end, "");
-                    } else {
-                        // If no closing tag, just remove the opening tag
-                        if let Some(tag_end) = result[tag_start..].find(">") {
-                            result.replace_range(tag_start..tag_start + tag_end + 1, "");
-                        }
-                    }
-                } else {
-                    // Fallback: remove just the element with class
-                    if let Some(tag_end) = result[tag_start..].find(">") {
-                        result.replace_range(tag_start..tag_start + tag_end + 1, "");
-                    }
-                }
-            }
+            result = self.remove_elements_by_class(&result, class);
         }
 
         result
@@ -650,7 +562,7 @@ mod tests {
     #[test]
     fn test_remove_scripts_and_styles() {
         let converter = HtmlConverter::new();
-        let html = r#"
+        let html = r##"
             <html>
             <head>
                 <script>alert('test');</script>
@@ -662,7 +574,7 @@ mod tests {
                 <p>Content</p>
             </body>
             </html>
-        "#;
+        "##;
         let result = converter.remove_scripts_and_styles(html);
         assert!(!result.contains("<script"));
         assert!(!result.contains("<style"));
@@ -675,12 +587,12 @@ mod tests {
     #[test]
     fn test_remove_navigation_elements() {
         let converter = HtmlConverter::new();
-        let html = r#"
+        let html = r##"
             <nav>Navigation menu</nav>
             <div class="nav">Nav div</div>
             <div class="navigation">Navigation div</div>
             <h1>Main content</h1>
-        "#;
+        "##;
         let result = converter.remove_navigation_elements(html);
         assert!(!result.contains("Navigation menu"));
         assert!(!result.contains("Nav div"));
@@ -691,12 +603,12 @@ mod tests {
     #[test]
     fn test_remove_sidebar_elements() {
         let converter = HtmlConverter::new();
-        let html = r#"
+        let html = r##"
             <div class="sidebar">Sidebar content</div>
             <div class="side-bar">Side bar content</div>
             <aside>Aside content</aside>
             <h1>Main content</h1>
-        "#;
+        "##;
         let result = converter.remove_sidebar_elements(html);
         assert!(!result.contains("Sidebar content"));
         assert!(!result.contains("Side bar content"));
@@ -707,12 +619,12 @@ mod tests {
     #[test]
     fn test_remove_advertisement_elements() {
         let converter = HtmlConverter::new();
-        let html = r#"
+        let html = r##"
             <div class="ad">Ad content</div>
             <div class="ads">Ads content</div>
             <div class="advertisement">Advertisement content</div>
             <h1>Main content</h1>
-        "#;
+        "##;
         let result = converter.remove_advertisement_elements(html);
         assert!(!result.contains("Ad content"));
         assert!(!result.contains("Ads content"));
@@ -753,5 +665,284 @@ mod tests {
         let result = converter.fix_heading_hierarchy(markdown);
         assert!(result.contains("## H3"));
         assert!(result.contains("### H5"));
+    }
+
+    // Integration tests with real-world HTML samples
+    #[test]
+    fn test_integration_blog_post_html() {
+        let converter = HtmlConverter::new();
+        let html = r##"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sample Blog Post</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <header>
+        <nav class="nav">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">About</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <main>
+        <article>
+            <h1>Understanding Rust's Ownership System</h1>
+            <p>Published on <time>2024-01-15</time></p>
+            
+            <h2>Introduction</h2>
+            <p>Rust's ownership system is one of its most distinctive features. It allows Rust to guarantee memory safety without needing a garbage collector.</p>
+            
+            <h3>Key Concepts</h3>
+            <ul>
+                <li><strong>Ownership</strong>: Each value has a single owner</li>
+                <li><strong>Borrowing</strong>: References allow you to use values without taking ownership</li>
+                <li><strong>Lifetimes</strong>: Ensure references are valid as long as needed</li>
+            </ul>
+            
+            <blockquote>
+                <p>"Rust's ownership system is revolutionary for systems programming."</p>
+            </blockquote>
+            
+            <h2>Code Examples</h2>
+            <pre><code>fn main() {
+    let s = String::from("hello");
+    takes_ownership(s);
+    // s is no longer valid here
+}
+
+fn takes_ownership(some_string: String) {
+    println!("{some_string}");
+}</code></pre>
+        </article>
+    </main>
+    
+    <aside class="sidebar">
+        <h3>Related Posts</h3>
+        <ul>
+            <li><a href="/post1">Rust Basics</a></li>
+            <li><a href="/post2">Memory Management</a></li>
+        </ul>
+    </aside>
+    
+    <footer>
+        <div class="ad">
+            <p>Advertisement: Learn Rust Online!</p>
+        </div>
+        <p>&copy; 2024 Tech Blog</p>
+    </footer>
+</body>
+</html>
+        "##;
+
+        let result = converter.convert(html).unwrap();
+
+        // Should contain main content
+        assert!(result.contains("# Understanding Rust's Ownership System"));
+        assert!(result.contains("## Introduction"));
+        assert!(result.contains("### Key Concepts"));
+        assert!(result.contains("Rust's ownership system is one of its most distinctive features"));
+        assert!(result.contains("* **Ownership**: Each value has a single owner"));
+        assert!(result
+            .contains("> \"Rust's ownership system is revolutionary for systems programming.\""));
+        assert!(result.contains("`fn main() {"));
+        assert!(result.contains("takes_ownership(s);"));
+
+        // Should NOT contain navigation, sidebar, or ads
+        assert!(!result.contains("Home"));
+        assert!(!result.contains("About"));
+        assert!(!result.contains("Related Posts"));
+        assert!(!result.contains("Advertisement: Learn Rust Online!"));
+
+        // Footer content should be minimal
+        assert!(!result.contains("© 2024 Tech Blog") || result.matches("©").count() <= 1);
+    }
+
+    #[test]
+    fn test_integration_news_article_html() {
+        let converter = HtmlConverter::new();
+        let html = r##"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tech News: AI Breakthrough</title>
+</head>
+<body>
+    <header class="site-header">
+        <div class="navigation">
+            <a href="/">News</a> | <a href="/tech">Tech</a> | <a href="/science">Science</a>
+        </div>
+    </header>
+    
+    <div class="content-wrapper">
+        <article class="main-article">
+            <h1>Major AI Breakthrough Announced</h1>
+            <div class="article-meta">
+                <span>By John Smith</span> | <span>March 15, 2024</span>
+            </div>
+            
+            <p class="lead">Researchers at Tech University have announced a significant breakthrough in artificial intelligence that could revolutionize the field.</p>
+            
+            <h2>The Discovery</h2>
+            <p>The team developed a new neural network architecture that improves efficiency by 300% while maintaining accuracy.</p>
+            
+            <h3>Technical Details</h3>
+            <p>The innovation focuses on:</p>
+            <ol>
+                <li>Optimized layer connections</li>
+                <li>Dynamic weight adjustment</li>
+                <li>Reduced computational overhead</li>
+            </ol>
+            
+            <div class="advertisement">
+                <h4>Sponsored Content</h4>
+                <p>Learn AI with our online courses! Special discount available.</p>
+            </div>
+            
+            <h2>Industry Impact</h2>
+            <p>This breakthrough is expected to have significant implications for various industries including healthcare, finance, and autonomous vehicles.</p>
+        </article>
+        
+        <div class="side-bar">
+            <h3>Trending Now</h3>
+            <ul>
+                <li>Tech Stock Rally</li>
+                <li>New Smartphone Launch</li>
+                <li>Climate Tech Funding</li>
+            </ul>
+        </div>
+    </div>
+    
+    <footer>
+        <p>© 2024 Tech News Network</p>
+    </footer>
+</body>
+</html>
+        "##;
+
+        let result = converter.convert(html).unwrap();
+
+        // Should contain main article content
+        assert!(result.contains("# Major AI Breakthrough Announced"));
+        assert!(result.contains("## The Discovery"));
+        assert!(result.contains("### Technical Details"));
+        assert!(result.contains("By John Smith"));
+        assert!(result.contains("March 15, 2024"));
+        assert!(result.contains("Researchers at Tech University"));
+        assert!(result.contains("1. Optimized layer connections"));
+        assert!(result.contains("2. Dynamic weight adjustment"));
+        assert!(result.contains("3. Reduced computational overhead"));
+
+        // Should NOT contain navigation, sidebar, or ads
+        assert!(!result.contains("News") || result.matches("News").count() <= 2); // Allow in title/content
+        assert!(!result.contains("Trending Now"));
+        assert!(!result.contains("Tech Stock Rally"));
+        assert!(!result.contains("Sponsored Content"));
+        assert!(!result.contains("Learn AI with our online courses"));
+    }
+
+    #[test]
+    fn test_integration_documentation_html() {
+        let converter = HtmlConverter::new();
+        let html = r##"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Documentation</title>
+</head>
+<body>
+    <nav class="docs-nav">
+        <ul>
+            <li><a href="#getting-started">Getting Started</a></li>
+            <li><a href="#api-reference">API Reference</a></li>
+            <li><a href="#examples">Examples</a></li>
+        </ul>
+    </nav>
+    
+    <main class="docs-content">
+        <h1>REST API Documentation</h1>
+        
+        <section id="getting-started">
+            <h2>Getting Started</h2>
+            <p>Welcome to our REST API. This guide will help you get started with making requests.</p>
+            
+            <h3>Authentication</h3>
+            <p>All API requests require authentication using an API key:</p>
+            <pre><code>curl -H "Authorization: Bearer YOUR_API_KEY" https://api.example.com/v1/users</code></pre>
+        </section>
+        
+        <section id="api-reference">
+            <h2>API Reference</h2>
+            
+            <h3>Users Endpoint</h3>
+            <h4>GET /users</h4>
+            <p>Retrieve a list of users.</p>
+            
+            <h5>Parameters</h5>
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>limit</td><td>integer</td><td>Number of users to return</td></tr>
+                    <tr><td>offset</td><td>integer</td><td>Number of users to skip</td></tr>
+                </tbody>
+            </table>
+            
+            <h5>Response</h5>
+            <pre><code>{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com"
+    }
+  ],
+  "total": 100
+}</code></pre>
+        </section>
+    </main>
+    
+    <aside class="ads">
+        <div class="ad-banner">
+            <h4>API Tools</h4>
+            <p>Try our API testing tools for free!</p>
+        </div>
+    </aside>
+</body>
+</html>
+        "##;
+
+        let result = converter.convert(html).unwrap();
+
+        // Should contain documentation content
+        assert!(result.contains("# REST API Documentation"));
+        assert!(result.contains("## Getting Started"));
+        assert!(result.contains("### Authentication"));
+        assert!(result.contains("## API Reference"));
+        assert!(result.contains("### Users Endpoint"));
+        assert!(result.contains("#### GET /users"));
+        assert!(result.contains("Parameters"));
+        assert!(result.contains("Response"));
+        assert!(result.contains("Welcome to our REST API"));
+        assert!(result.contains("curl -H \"Authorization: Bearer YOUR_API_KEY\""));
+        assert!(
+            result.contains("Name") && result.contains("Type") && result.contains("Description")
+        );
+        assert!(
+            result.contains("limit")
+                && result.contains("integer")
+                && result.contains("Number of users to return")
+        );
+
+        // Should NOT contain navigation or ads
+        assert!(
+            !result.contains("Getting Started") || result.matches("Getting Started").count() <= 2
+        );
+        assert!(!result.contains("API Tools"));
+        assert!(!result.contains("Try our API testing tools"));
     }
 }

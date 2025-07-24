@@ -16,7 +16,7 @@
 //! - Unified public API for simple integration
 
 /// Core types, traits, and error definitions
-pub mod types {}
+pub mod types;
 
 /// HTTP client wrapper for network operations
 pub mod client {}
@@ -56,8 +56,14 @@ mod tests {
 
     #[test]
     fn test_version_available() {
-        assert!(!VERSION.is_empty());
-        // Verify version follows semantic versioning pattern
+        // Verify version follows semantic versioning pattern (major.minor.patch)
         assert!(VERSION.chars().any(|c| c.is_ascii_digit()));
+        assert!(VERSION.contains('.'));
+        // Basic format validation - should have at least one dot for major.minor
+        let parts: Vec<&str> = VERSION.split('.').collect();
+        assert!(
+            parts.len() >= 2,
+            "Version should have at least major.minor format"
+        );
     }
 }

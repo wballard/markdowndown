@@ -251,8 +251,8 @@ impl Markdown {
             if content_start < self.0.len() {
                 // Skip any leading newlines from the combination
                 let remaining = &self.0[content_start..];
-                if remaining.starts_with('\n') {
-                    remaining[1..].to_string()
+                if let Some(stripped) = remaining.strip_prefix('\n') {
+                    stripped.to_string()
                 } else {
                     remaining.to_string()
                 }

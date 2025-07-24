@@ -182,7 +182,7 @@ impl FrontmatterBuilder {
         // Serialize to YAML
         let mut yaml_content =
             serde_yaml::to_string(&frontmatter).map_err(|e| MarkdownError::ParseError {
-                message: format!("Failed to serialize frontmatter to YAML: {}", e),
+                message: format!("Failed to serialize frontmatter to YAML: {e}"),
             })?;
 
         // Add additional fields if any
@@ -190,7 +190,7 @@ impl FrontmatterBuilder {
             // Parse the existing YAML to add additional fields
             let mut yaml_value: serde_yaml::Value =
                 serde_yaml::from_str(&yaml_content).map_err(|e| MarkdownError::ParseError {
-                    message: format!("Failed to parse generated YAML: {}", e),
+                    message: format!("Failed to parse generated YAML: {e}"),
                 })?;
 
             if let serde_yaml::Value::Mapping(ref mut map) = yaml_value {
@@ -204,12 +204,12 @@ impl FrontmatterBuilder {
 
             yaml_content =
                 serde_yaml::to_string(&yaml_value).map_err(|e| MarkdownError::ParseError {
-                    message: format!("Failed to serialize extended frontmatter to YAML: {}", e),
+                    message: format!("Failed to serialize extended frontmatter to YAML: {e}"),
                 })?;
         }
 
         // Format with YAML delimiters
-        Ok(format!("---\n{}---\n", yaml_content))
+        Ok(format!("---\n{yaml_content}---\n"))
     }
 }
 
@@ -237,7 +237,7 @@ impl FrontmatterBuilder {
 /// assert!(complete_doc.contains("# My Document"));
 /// ```
 pub fn combine_frontmatter_and_content(frontmatter: &str, content: &str) -> String {
-    format!("{}\n{}", frontmatter, content)
+    format!("{frontmatter}\n{content}")
 }
 
 /// Extracts frontmatter from a markdown document.
@@ -313,8 +313,8 @@ pub fn strip_frontmatter(markdown: &str) -> String {
         if content_start < markdown.len() {
             // Skip any leading newlines from the combination
             let remaining = &markdown[content_start..];
-            if remaining.starts_with('\n') {
-                remaining[1..].to_string()
+            if let Some(stripped) = remaining.strip_prefix('\n') {
+                stripped.to_string()
             } else {
                 remaining.to_string()
             }

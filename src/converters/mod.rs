@@ -3,6 +3,9 @@
 //! This module provides converters for different content types, enabling
 //! the transformation of HTML, documents, and other formats into clean markdown.
 
+/// Base converter trait and registry
+pub mod converter;
+
 /// Configuration options for HTML conversion
 pub mod config;
 
@@ -23,6 +26,7 @@ pub mod placeholder;
 
 // Re-export main converter types for convenience
 pub use config::HtmlConverterConfig;
+pub use converter::{Converter, ConverterRegistry};
 pub use html::HtmlConverter;
 pub use google_docs::GoogleDocsConverter;
 pub use placeholder::{GitHubIssueConverter, Office365Converter};

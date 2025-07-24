@@ -522,10 +522,10 @@ mod tests {
             assert!(result.is_err(), "Should fail for URL: {url}");
 
             match result.unwrap_err() {
-                MarkdownError::ParseError { message } => {
-                    assert!(message.contains(url));
+                MarkdownError::InvalidUrl { url: error_url } => {
+                    assert_eq!(error_url, *url);
                 }
-                _ => panic!("Expected ParseError error for: {url}"),
+                _ => panic!("Expected InvalidUrl error for: {url}"),
             }
         }
     }

@@ -74,7 +74,6 @@ use crate::types::{Markdown, MarkdownError};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
 pub struct MarkdownDown {
     config: crate::config::Config,
     detector: UrlDetector,

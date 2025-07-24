@@ -31,6 +31,7 @@ use crate::client::HttpClient;
 use crate::frontmatter::FrontmatterBuilder;
 use crate::types::{Markdown, MarkdownError};
 use chrono::Utc;
+use async_trait::async_trait;
 
 /// Google Docs to markdown converter with intelligent URL handling.
 ///
@@ -434,6 +435,17 @@ impl GoogleDocsConverter {
             && id.len() >= 25  // Minimum reasonable length
             && id.len() <= 100 // Maximum reasonable length
             && id.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_'))
+    }
+}
+
+#[async_trait]
+impl super::Converter for GoogleDocsConverter {
+    async fn convert(&self, url: &str) -> Result<Markdown, MarkdownError> {
+        self.convert(url).await
+    }
+
+    fn name(&self) -> &'static str {
+        "Google Docs"
     }
 }
 

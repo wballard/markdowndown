@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use html2text::from_read;
 use std::io::Cursor;
 
-use super::config::HtmlConverterConfig;
+pub use super::config::HtmlConverterConfig;
+use super::converter::Converter;
 use super::postprocessor::MarkdownPostprocessor;
 use super::preprocessor::HtmlPreprocessor;
 
@@ -47,13 +48,13 @@ impl HtmlConverter {
     ///
     /// # Arguments
     ///
-    /// * `config` - Custom configuration options for the converter
     /// * `client` - Configured HTTP client to use for requests
+    /// * `config` - Custom configuration options for the converter
     ///
     /// # Returns
     ///
     /// A new `HtmlConverter` instance with the specified configuration.
-    pub fn with_config(config: HtmlConverterConfig, client: HttpClient) -> Self {
+    pub fn with_config(client: HttpClient, config: HtmlConverterConfig) -> Self {
         Self { config, client }
     }
 

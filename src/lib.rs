@@ -172,7 +172,7 @@ impl MarkdownDown {
 
         // Step 3: Get appropriate converter
         let converter = self.registry.get_converter(&url_type).ok_or_else(|| {
-            MarkdownError::ConfigurationError {
+            MarkdownError::LegacyConfigurationError {
                 message: format!("No converter available for URL type: {url_type}"),
             }
         })?;

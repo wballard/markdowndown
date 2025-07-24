@@ -216,3 +216,44 @@ tests/
 └── helpers/
     └── common.rs
 ```
+
+
+## Proposed Solution
+
+After analyzing the codebase, I can see that most test infrastructure is already in place but many tests are failing (70 failures out of 328 tests). The project has:
+
+- ✅ Test directory structure already created (`tests/unit/`, `tests/fixtures/`, `tests/mocks/`, `tests/helpers/`)
+- ✅ Dev dependencies configured (`mockito`, `proptest`, `criterion`, `wiremock`, `tokio-test`)
+- ✅ Mock server infrastructure partially implemented
+- ✅ Test files for all major modules created
+- ❌ Many test implementations are incomplete or failing
+
+My approach will be:
+
+1. **Fix existing failing tests systematically** - Start with core types and work up the dependency chain
+2. **Follow TDD principles** - Fix one failing test at a time, implement minimal code to make it pass
+3. **Ensure proper mocking** - Verify mock servers are working correctly for external API calls
+4. **Add missing test coverage** - Identify gaps and implement missing test cases
+5. **Validate property-based tests** - Ensure `proptest` integration is working correctly
+6. **Performance benchmarks** - Implement basic criterion benchmarks
+
+The implementation will focus on:
+- Core type validation and error handling
+- HTTP client mocking and network simulation
+- URL detection edge cases and pattern matching
+- Converter functionality with proper mocking
+- Frontmatter generation and parsing
+- End-to-end workflow validation
+- Property-based testing for robustness
+
+## Implementation Steps
+
+1. Fix core type tests (`types.rs`)
+2. Fix HTTP client tests with proper mocking (`client.rs`)
+3. Fix URL detection tests and edge cases (`detection.rs`)
+4. Fix converter tests one by one (HTML, Google Docs, Office365, GitHub)
+5. Fix frontmatter tests and YAML serialization
+6. Fix integration tests and end-to-end workflows
+7. Implement missing property-based tests
+8. Add performance benchmarks
+9. Achieve >90% test coverage

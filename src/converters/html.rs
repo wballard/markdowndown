@@ -153,14 +153,25 @@ impl HtmlConverter {
 impl Converter for HtmlConverter {
     /// Converts content from a URL to markdown by fetching HTML and converting it.
     async fn convert(&self, url: &str) -> Result<Markdown, MarkdownError> {
-        // Fetch HTML content from URL
-        let html_content = self.client.get_text(url).await?;
+        // Fetch HTML content from URL with HTML-specific headers
+        let headers = std::collections::HashMap::from([(
+            "Accept".to_string(),
+            "text/html,application/xhtml+xml".to_string(),
+        )]);
+        let html_content = self.client.get_text_with_headers(url, &headers).await?;
 
         // Convert HTML to markdown string
         let markdown_string = self.convert_html(&html_content)?;
 
+        // Handle empty content case - provide minimal markdown for empty HTML
+        let final_markdown = if markdown_string.trim().is_empty() {
+            "<!-- Empty HTML document -->".to_string()
+        } else {
+            markdown_string
+        };
+
         // Wrap in Markdown type with validation
-        Markdown::new(markdown_string)
+        Markdown::new(final_markdown)
     }
 
     /// Returns the name of this converter.
@@ -188,9 +199,11 @@ mod tests {
 
     #[test]
     fn test_html_converter_with_config() {
-        let mut config = HtmlConverterConfig::default();
-        config.max_line_width = 80;
-        config.remove_scripts_styles = false;
+        let config = HtmlConverterConfig {
+            max_line_width: 80,
+            remove_scripts_styles: false,
+            ..Default::default()
+        };
 
         let converter = HtmlConverter::with_config_only(config);
         assert_eq!(converter.config.max_line_width, 80);

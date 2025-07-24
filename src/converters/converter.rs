@@ -37,6 +37,13 @@ pub struct ConverterRegistry {
 }
 
 impl ConverterRegistry {
+    /// Creates an empty converter registry with no converters.
+    pub fn empty() -> Self {
+        Self {
+            converters: std::collections::HashMap::new(),
+        }
+    }
+
     /// Creates a new converter registry with default converters.
     pub fn new() -> Self {
         let mut registry = Self {

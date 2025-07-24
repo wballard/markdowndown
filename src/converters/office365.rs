@@ -1054,8 +1054,7 @@ mod tests {
             let error_msg = result.unwrap_err().to_string().to_lowercase();
             assert!(
                 error_msg.contains("pandoc") || error_msg.contains("failed to execute"),
-                "Expected pandoc-related error, got: {}",
-                error_msg
+                "Expected pandoc-related error, got: {error_msg}"
             );
         });
     }

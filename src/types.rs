@@ -215,7 +215,22 @@ impl Markdown {
         let content_after_start = &self.0[4..]; // Skip "---\n"
         if let Some(end_pos) = content_after_start.find("\n---\n") {
             let full_frontmatter = &self.0[..4 + end_pos + 5]; // Include both delimiters
-            Some(full_frontmatter.to_string())
+
+            // Extract just the YAML content (without delimiters) for validation
+            let yaml_content = &self.0[4..4 + end_pos]; // Content between delimiters
+
+            // Check for malformed frontmatter patterns
+            // Frontmatter should not start with "---" (which would indicate nested delimiters)
+            if yaml_content.trim_start().starts_with("---") {
+                return None; // Malformed frontmatter with nested delimiters
+            }
+
+            // Validate that it's parseable as YAML
+            if serde_yaml::from_str::<serde_yaml::Value>(yaml_content).is_ok() {
+                Some(full_frontmatter.to_string())
+            } else {
+                None // Invalid YAML, treat as regular content
+            }
         } else {
             None
         }
@@ -244,23 +259,67 @@ impl Markdown {
             return self.0.clone();
         }
 
-        // Find the closing delimiter
+        // If frontmatter parsing fails, treat the whole thing as content
+        if self.frontmatter().is_none() {
+            return self.0.clone();
+        }
+
+        // Find the closing delimiter - look for proper frontmatter end
+        // We need to find a line that contains only "---"
         let content_after_start = &self.0[4..]; // Skip "---\n"
-        if let Some(end_pos) = content_after_start.find("\n---\n") {
-            let content_start = 4 + end_pos + 5; // Skip "---\n" + frontmatter + "\n---\n"
+        let lines: Vec<&str> = content_after_start.lines().collect();
+        let mut frontmatter_end_idx = None;
+
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim() == "---" {
+                // This could be the end of frontmatter
+                frontmatter_end_idx = Some(i);
+                break;
+            }
+        }
+
+        if let Some(end_line_idx) = frontmatter_end_idx {
+            // Calculate byte position of the content after frontmatter
+            let mut content_start = 4; // Start after "---\n"
+                                       // Add bytes for all lines up to and including the closing "---"
+            for line in lines.iter().take(end_line_idx + 1) {
+                content_start += line.len();
+                content_start += 1; // Add newline character
+            }
+
             if content_start < self.0.len() {
-                // Skip any leading newlines from the combination
-                let remaining = &self.0[content_start..];
-                if let Some(stripped) = remaining.strip_prefix('\n') {
-                    stripped.to_string()
+                // Skip any leading newlines and additional --- lines from malformed frontmatter
+                let mut remaining = &self.0[content_start..];
+                remaining = remaining.strip_prefix('\n').unwrap_or(remaining);
+
+                // Keep stripping lines that contain only "---"
+                let remaining_lines: Vec<&str> = remaining.lines().collect();
+                let mut actual_content_start = 0;
+                for (i, line) in remaining_lines.iter().enumerate() {
+                    if line.trim() != "---" {
+                        actual_content_start = i;
+                        break;
+                    }
+                }
+
+                if actual_content_start < remaining_lines.len() {
+                    let content_lines = &remaining_lines[actual_content_start..];
+                    // Join with newlines and add a final newline if there was one originally
+                    let mut result = content_lines.join("\n");
+                    // If the last element is empty, it means there was a trailing newline
+                    if content_lines.last() == Some(&"") {
+                        result.push('\n');
+                    }
+                    result
                 } else {
-                    remaining.to_string()
+                    String::new()
                 }
             } else {
                 String::new()
             }
         } else {
-            // No closing delimiter found, return original content
+            // No proper closing delimiter found, treat as malformed frontmatter
+            // Return the original content unchanged
             self.0.clone()
         }
     }
@@ -299,7 +358,7 @@ impl fmt::Display for Markdown {
 }
 
 /// A newtype wrapper for URLs with validation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Url(String);
 
 impl Url {
@@ -315,7 +374,11 @@ impl Url {
         {
             Ok(Url(url))
         } else {
-            Err(MarkdownError::InvalidUrl { url })
+            let context = ErrorContext::new(&url, "URL validation", "Url::new");
+            Err(MarkdownError::ValidationError {
+                kind: ValidationErrorKind::InvalidUrl,
+                context,
+            })
         }
     }
 
@@ -334,6 +397,16 @@ impl fmt::Display for Url {
 impl AsRef<str> for Url {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Url {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Url::new(s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -558,7 +631,17 @@ impl MarkdownError {
     /// Returns true if recovery strategies should be attempted.
     pub fn is_recoverable(&self) -> bool {
         match self {
-            MarkdownError::EnhancedNetworkError { .. } => true,
+            MarkdownError::EnhancedNetworkError { kind, .. } => match kind {
+                NetworkErrorKind::Timeout => true,
+                NetworkErrorKind::ConnectionFailed => true,
+                NetworkErrorKind::DnsResolution => false,
+                NetworkErrorKind::RateLimited => true,
+                NetworkErrorKind::ServerError(status) => match status {
+                    500..=503 | 429 => true, // Server errors and rate limiting
+                    400..=499 => false,      // Client errors (including 400 Bad Request)
+                    _ => true,               // Other status codes default to recoverable
+                },
+            },
             MarkdownError::AuthenticationError { .. } => true,
             MarkdownError::ConverterError { .. } => true,
             MarkdownError::ContentError {
@@ -896,10 +979,11 @@ mod tests {
         let result = Url::new("not-a-url".to_string());
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::InvalidUrl { url } => {
-                assert_eq!(url, "not-a-url");
+            MarkdownError::ValidationError { kind, context } => {
+                assert_eq!(kind, ValidationErrorKind::InvalidUrl);
+                assert_eq!(context.url, "not-a-url");
             }
-            _ => panic!("Expected InvalidUrl error"),
+            _ => panic!("Expected ValidationError with InvalidUrl kind"),
         }
     }
 
@@ -956,10 +1040,11 @@ mod tests {
             assert!(invalid_url_result.is_err());
 
             match invalid_url_result.unwrap_err() {
-                MarkdownError::InvalidUrl { url } => {
-                    assert_eq!(url, "not-a-valid-url");
+                MarkdownError::ValidationError { kind, context } => {
+                    assert_eq!(kind, ValidationErrorKind::InvalidUrl);
+                    assert_eq!(context.url, "not-a-valid-url");
                 }
-                _ => panic!("Expected InvalidUrl error"),
+                _ => panic!("Expected ValidationError with InvalidUrl kind"),
             }
         }
 
@@ -1214,7 +1299,7 @@ mod tests {
                 // Timestamp should be recent (within last few seconds)
                 let now = Utc::now();
                 let diff = (now - context.timestamp).num_seconds();
-                assert!(diff >= 0 && diff < 5);
+                assert!((0..5).contains(&diff));
             }
 
             #[test]
@@ -1502,7 +1587,7 @@ mod tests {
                     context,
                 };
 
-                let error_string = format!("{}", error);
+                let error_string = format!("{error}");
                 assert!(error_string.contains("Validation error"));
                 assert!(error_string.contains("InvalidUrl"));
             }

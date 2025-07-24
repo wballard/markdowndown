@@ -295,18 +295,22 @@ impl UrlDetector {
 
         // Basic validation - must be HTTP or HTTPS
         if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
-            return Err(MarkdownError::InvalidUrl {
-                url: url.to_string(),
+            let context =
+                crate::types::ErrorContext::new(url, "URL parsing", "UrlDetector::parse_url");
+            return Err(MarkdownError::ValidationError {
+                kind: crate::types::ValidationErrorKind::InvalidUrl,
+                context,
             });
         }
 
-        ParsedUrl::parse(trimmed).map_err(|parse_error| MarkdownError::ParseError {
-            message: format!(
-                "Failed to parse URL '{url}' (length: {} chars, after trimming: '{}'): {}",
-                url.len(),
-                trimmed,
-                parse_error
-            ),
+        ParsedUrl::parse(trimmed).map_err(|parse_error| {
+            let context =
+                crate::types::ErrorContext::new(url, "URL parsing", "UrlDetector::parse_url")
+                    .with_info(format!("Parse error: {parse_error}"));
+            MarkdownError::ValidationError {
+                kind: crate::types::ValidationErrorKind::InvalidUrl,
+                context,
+            }
         })
     }
 
@@ -542,10 +546,11 @@ mod tests {
             assert!(result.is_err(), "Should fail for URL: {url}");
 
             match result.unwrap_err() {
-                MarkdownError::InvalidUrl { url: error_url } => {
-                    assert_eq!(error_url, *url);
+                MarkdownError::ValidationError { kind, context } => {
+                    assert_eq!(kind, crate::types::ValidationErrorKind::InvalidUrl);
+                    assert_eq!(context.url, *url);
                 }
-                _ => panic!("Expected InvalidUrl error for: {url}"),
+                _ => panic!("Expected ValidationError with InvalidUrl kind for: {url}"),
             }
         }
     }

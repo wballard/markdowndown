@@ -67,8 +67,8 @@ impl Converter for PlaceholderConverter {
         };
 
         let markdown_content = format!(
-            "# Converted from {}\n\nSource: {}\n\n{}",
-            self.config.service_name, url, truncated_content
+            "# Converted from {} (Preview)\n\nSource: {}\n\n> **Note:** This is a placeholder conversion with limited formatting. For full document features, use the native {} application.\n\n{}",
+            self.config.service_name, url, self.config.service_name, truncated_content
         );
 
         Markdown::new(markdown_content)

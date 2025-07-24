@@ -27,6 +27,9 @@ impl<'a> MarkdownPostprocessor<'a> {
         // Clean up malformed links
         cleaned = self.clean_malformed_links(&cleaned);
 
+        // Convert reference links to inline links
+        cleaned = self.convert_reference_links_to_inline(&cleaned);
+
         // Ensure proper heading hierarchy
         cleaned = self.fix_heading_hierarchy(&cleaned);
 
@@ -144,6 +147,48 @@ impl<'a> MarkdownPostprocessor<'a> {
         }
 
         cleaned
+    }
+
+    /// Converts reference-style links to inline links.
+    fn convert_reference_links_to_inline(&self, markdown: &str) -> String {
+        use std::collections::HashMap;
+
+        let mut result = markdown.to_string();
+        let mut reference_definitions = HashMap::new();
+        let mut filtered_lines = Vec::new();
+
+        // Process lines to collect reference definitions and filter them out
+        for line in result.split('\n') {
+            let trimmed = line.trim();
+
+            // Check if this is a reference definition like [1]: https://example.com
+            if let Some(colon_pos) = trimmed.find("]: ") {
+                if trimmed.starts_with('[') {
+                    let bracket_end = colon_pos;
+                    if bracket_end > 1 {
+                        let reference = &trimmed[1..bracket_end];
+                        let url = &trimmed[colon_pos + 3..];
+                        reference_definitions.insert(reference.to_string(), url.to_string());
+                        // Skip adding this line to filtered_lines (removes the reference definition)
+                        continue;
+                    }
+                }
+            }
+
+            // Keep all non-reference-definition lines
+            filtered_lines.push(line);
+        }
+
+        result = filtered_lines.join("\n");
+
+        // Convert reference-style links to inline links
+        for (reference, url) in reference_definitions {
+            let reference_pattern = format!("[{reference}]");
+            let inline_replacement = format!("({url})");
+            result = result.replace(&reference_pattern, &inline_replacement);
+        }
+
+        result
     }
 
     /// Fixes heading hierarchy to ensure no levels are skipped.

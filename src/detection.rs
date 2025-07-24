@@ -289,8 +289,8 @@ impl UrlDetector {
             });
         }
 
-        ParsedUrl::parse(trimmed).map_err(|parse_error| MarkdownError::ParseError {
-            message: format!("Failed to parse URL '{url}': {parse_error}"),
+        ParsedUrl::parse(trimmed).map_err(|_parse_error| MarkdownError::InvalidUrl {
+            url: url.to_string(),
         })
     }
 

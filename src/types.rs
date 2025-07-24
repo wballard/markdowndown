@@ -379,6 +379,10 @@ pub enum MarkdownError {
     /// Authentication errors
     #[error("Authentication error: {message}")]
     AuthError { message: String },
+
+    /// Configuration or system capability errors
+    #[error("Configuration error: {message}")]
+    ConfigurationError { message: String },
 }
 
 /// Frontmatter structure for document metadata.

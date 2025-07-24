@@ -50,8 +50,17 @@ pub struct Config {
     pub auth: AuthConfig,
     /// HTML converter specific settings
     pub html: HtmlConverterConfig,
+    /// Placeholder converter settings
+    pub placeholder: PlaceholderSettings,
     /// Output formatting options
     pub output: OutputConfig,
+}
+
+/// Configuration for placeholder converters.
+#[derive(Debug, Clone)]
+pub struct PlaceholderSettings {
+    /// Maximum characters to include from content
+    pub max_content_length: usize,
 }
 
 /// HTTP client configuration options.
@@ -99,6 +108,7 @@ pub struct ConfigBuilder {
     http: HttpConfig,
     auth: AuthConfig,
     html: HtmlConverterConfig,
+    placeholder: PlaceholderSettings,
     output: OutputConfig,
 }
 
@@ -196,6 +206,9 @@ impl ConfigBuilder {
                 google_api_key: None,
             },
             html: HtmlConverterConfig::default(),
+            placeholder: PlaceholderSettings {
+                max_content_length: 1000,
+            },
             output: OutputConfig {
                 include_frontmatter: true,
                 custom_frontmatter_fields: Vec::new(),
@@ -413,6 +426,16 @@ impl ConfigBuilder {
         self
     }
 
+    /// Sets the maximum content length for placeholder converters.
+    ///
+    /// # Arguments
+    ///
+    /// * `length` - Maximum content length in characters
+    pub fn placeholder_max_content_length(mut self, length: usize) -> Self {
+        self.placeholder.max_content_length = length;
+        self
+    }
+
     /// Builds the final configuration.
     ///
     /// # Returns
@@ -434,6 +457,7 @@ impl ConfigBuilder {
             http: self.http,
             auth: self.auth,
             html: self.html,
+            placeholder: self.placeholder,
             output: self.output,
         }
     }

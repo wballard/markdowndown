@@ -33,6 +33,7 @@ pub mod detection;
 /// Configuration system
 pub mod config;
 
+use crate::client::HttpClient;
 use crate::converters::ConverterRegistry;
 use crate::detection::UrlDetector;
 use crate::types::{Markdown, MarkdownError};
@@ -116,10 +117,17 @@ impl MarkdownDown {
     /// let md = MarkdownDown::with_config(config);
     /// ```
     pub fn with_config(config: crate::config::Config) -> Self {
+        // Create configured HTTP client
+        let http_client = HttpClient::with_config(&config.http, &config.auth);
+
+        // Create registry with configured HTTP client, HTML config, and placeholder settings
+        let registry =
+            ConverterRegistry::with_config(http_client, config.html.clone(), &config.placeholder);
+
         Self {
             config,
             detector: UrlDetector::new(),
-            registry: ConverterRegistry::new(),
+            registry,
         }
     }
 
@@ -142,6 +150,7 @@ impl MarkdownDown {
     /// * `MarkdownError::NetworkError` - For network-related failures
     /// * `MarkdownError::ParseError` - If content conversion fails
     /// * `MarkdownError::AuthError` - For authentication failures
+    /// * `MarkdownError::ConfigurationError` - If no converter is available for the URL type
     ///
     /// # Examples
     ///
@@ -163,12 +172,11 @@ impl MarkdownDown {
         let url_type = self.detector.detect_type(&normalized_url)?;
 
         // Step 3: Get appropriate converter
-        let converter =
-            self.registry
-                .get_converter(&url_type)
-                .ok_or_else(|| MarkdownError::ParseError {
-                    message: format!("No converter available for URL type: {url_type}"),
-                })?;
+        let converter = self.registry.get_converter(&url_type).ok_or_else(|| {
+            MarkdownError::ConfigurationError {
+                message: format!("No converter available for URL type: {url_type}"),
+            }
+        })?;
 
         // Step 4: Convert using the selected converter
         converter.convert(&normalized_url).await
@@ -298,6 +306,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_version_available() {
@@ -310,5 +319,169 @@ mod tests {
             parts.len() >= 2,
             "Version should have at least major.minor format"
         );
+    }
+
+    #[test]
+    fn test_markdowndown_with_default_config() {
+        // Test that MarkdownDown can be created with default configuration
+        let md = MarkdownDown::new();
+
+        // Verify config is stored and accessible
+        let config = md.config();
+        assert_eq!(config.http.timeout, Duration::from_secs(30));
+        assert_eq!(config.http.max_retries, 3);
+        assert_eq!(config.http.retry_delay, Duration::from_secs(1));
+        assert_eq!(config.http.max_redirects, 10);
+        assert!(config.auth.github_token.is_none());
+        assert!(config.auth.office365_token.is_none());
+        assert!(config.auth.google_api_key.is_none());
+        assert_eq!(config.placeholder.max_content_length, 1000);
+        assert!(config.output.include_frontmatter);
+        assert_eq!(config.output.max_consecutive_blank_lines, 2);
+    }
+
+    #[test]
+    fn test_markdowndown_with_custom_config() {
+        // Test that MarkdownDown respects custom configuration
+        let config = Config::builder()
+            .timeout_seconds(60)
+            .user_agent("TestApp/1.0")
+            .max_retries(5)
+            .github_token("test_token")
+            .placeholder_max_content_length(2000)
+            .include_frontmatter(false)
+            .max_consecutive_blank_lines(1)
+            .build();
+
+        let md = MarkdownDown::with_config(config);
+
+        // Verify custom config is stored
+        let stored_config = md.config();
+        assert_eq!(stored_config.http.timeout, Duration::from_secs(60));
+        assert_eq!(stored_config.http.user_agent, "TestApp/1.0");
+        assert_eq!(stored_config.http.max_retries, 5);
+        assert_eq!(
+            stored_config.auth.github_token,
+            Some("test_token".to_string())
+        );
+        assert_eq!(stored_config.placeholder.max_content_length, 2000);
+        assert!(!stored_config.output.include_frontmatter);
+        assert_eq!(stored_config.output.max_consecutive_blank_lines, 1);
+    }
+
+    #[test]
+    fn test_config_builder_fluent_interface() {
+        // Test that the config builder's fluent interface works correctly
+        let config = Config::builder()
+            .github_token("ghp_test_token")
+            .office365_token("office_token")
+            .google_api_key("google_key")
+            .timeout_seconds(45)
+            .user_agent("IntegrationTest/2.0")
+            .max_retries(3)
+            .placeholder_max_content_length(1500)
+            .include_frontmatter(true)
+            .custom_frontmatter_field("project", "markdowndown")
+            .custom_frontmatter_field("version", "test")
+            .normalize_whitespace(false)
+            .max_consecutive_blank_lines(3)
+            .build();
+
+        // Verify all custom settings
+        assert_eq!(config.auth.github_token, Some("ghp_test_token".to_string()));
+        assert_eq!(
+            config.auth.office365_token,
+            Some("office_token".to_string())
+        );
+        assert_eq!(config.auth.google_api_key, Some("google_key".to_string()));
+        assert_eq!(config.http.timeout, Duration::from_secs(45));
+        assert_eq!(config.http.user_agent, "IntegrationTest/2.0");
+        assert_eq!(config.http.max_retries, 3);
+        assert_eq!(config.placeholder.max_content_length, 1500);
+        assert!(config.output.include_frontmatter);
+        assert_eq!(config.output.custom_frontmatter_fields.len(), 2);
+        assert_eq!(
+            config.output.custom_frontmatter_fields[0],
+            ("project".to_string(), "markdowndown".to_string())
+        );
+        assert_eq!(
+            config.output.custom_frontmatter_fields[1],
+            ("version".to_string(), "test".to_string())
+        );
+        assert!(!config.output.normalize_whitespace);
+        assert_eq!(config.output.max_consecutive_blank_lines, 3);
+    }
+
+    #[test]
+    fn test_config_from_default() {
+        // Test that Config::default() produces expected defaults
+        let config = Config::default();
+
+        // HTTP config defaults
+        assert_eq!(config.http.timeout, Duration::from_secs(30));
+        assert!(config.http.user_agent.starts_with("markdowndown/"));
+        assert_eq!(config.http.max_retries, 3);
+        assert_eq!(config.http.retry_delay, Duration::from_secs(1));
+        assert_eq!(config.http.max_redirects, 10);
+
+        // Auth config defaults
+        assert!(config.auth.github_token.is_none());
+        assert!(config.auth.office365_token.is_none());
+        assert!(config.auth.google_api_key.is_none());
+
+        // Placeholder config defaults
+        assert_eq!(config.placeholder.max_content_length, 1000);
+
+        // Output config defaults
+        assert!(config.output.include_frontmatter);
+        assert!(config.output.custom_frontmatter_fields.is_empty());
+        assert!(config.output.normalize_whitespace);
+        assert_eq!(config.output.max_consecutive_blank_lines, 2);
+    }
+
+    #[test]
+    fn test_supported_url_types() {
+        // Test that MarkdownDown reports supported URL types correctly
+        let md = MarkdownDown::new();
+        let supported_types = md.supported_types();
+
+        // Should support at least these URL types
+        assert!(supported_types.contains(&crate::types::UrlType::Html));
+        assert!(supported_types.contains(&crate::types::UrlType::GoogleDocs));
+        assert!(supported_types.contains(&crate::types::UrlType::Office365));
+        assert!(supported_types.contains(&crate::types::UrlType::GitHubIssue));
+
+        // Should have exactly 4 supported types
+        assert_eq!(supported_types.len(), 4);
+    }
+
+    #[test]
+    fn test_detect_url_type_integration() {
+        // Test that URL type detection works through the main API
+
+        // Test HTML URL
+        let html_result = detect_url_type("https://example.com/article.html");
+        assert!(html_result.is_ok());
+        assert_eq!(html_result.unwrap(), crate::types::UrlType::Html);
+
+        // Test Google Docs URL
+        let gdocs_result = detect_url_type("https://docs.google.com/document/d/abc123/edit");
+        assert!(gdocs_result.is_ok());
+        assert_eq!(gdocs_result.unwrap(), crate::types::UrlType::GoogleDocs);
+
+        // Test Office 365 URL
+        let office_result =
+            detect_url_type("https://company.sharepoint.com/sites/team/Document.docx");
+        assert!(office_result.is_ok());
+        assert_eq!(office_result.unwrap(), crate::types::UrlType::Office365);
+
+        // Test GitHub Issue URL
+        let github_result = detect_url_type("https://github.com/owner/repo/issues/123");
+        assert!(github_result.is_ok());
+        assert_eq!(github_result.unwrap(), crate::types::UrlType::GitHubIssue);
+
+        // Test invalid URL
+        let invalid_result = detect_url_type("not-a-url");
+        assert!(invalid_result.is_err());
     }
 }

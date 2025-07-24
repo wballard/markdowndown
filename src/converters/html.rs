@@ -71,20 +71,18 @@ impl HtmlConverter {
         }
     }
 
-    /// Creates a new HTML converter with custom configuration.
+    /// Creates a new HTML converter with custom configuration and HTTP client.
     ///
     /// # Arguments
     ///
     /// * `config` - Custom configuration options for the converter
+    /// * `client` - Configured HTTP client to use for requests
     ///
     /// # Returns
     ///
     /// A new `HtmlConverter` instance with the specified configuration.
-    pub fn with_config(config: HtmlConverterConfig) -> Self {
-        Self {
-            config,
-            client: HttpClient::new(),
-        }
+    pub fn with_config(config: HtmlConverterConfig, client: HttpClient) -> Self {
+        Self { config, client }
     }
 
     /// Converts HTML to clean markdown with preprocessing and postprocessing.
@@ -522,7 +520,7 @@ mod tests {
             remove_ads: false,
             max_blank_lines: 1,
         };
-        let converter = HtmlConverter::with_config(config.clone());
+        let converter = HtmlConverter::with_config(config.clone(), HttpClient::new());
         assert_eq!(converter.config.max_line_width, 80);
         assert!(!converter.config.remove_scripts_styles);
         assert!(!converter.config.remove_navigation);

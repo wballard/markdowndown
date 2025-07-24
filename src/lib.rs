@@ -59,6 +59,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::detection::UrlDetector;
+    use crate::converters::GitHubConverter;
+    use crate::types::UrlType;
 
     #[test]
     fn test_version_available() {
@@ -71,5 +74,34 @@ mod tests {
             parts.len() >= 2,
             "Version should have at least major.minor format"
         );
+    }
+
+    #[test]
+    fn test_github_integration_issue_and_pr() {
+        // Test integration between URL detection and GitHub converter
+        let detector = UrlDetector::new();
+        let converter = GitHubConverter::new();
+
+        // Test GitHub issue URL
+        let issue_url = "https://github.com/microsoft/vscode/issues/12345";
+        let detected_type = detector.detect_type(issue_url).unwrap();
+        assert_eq!(detected_type, UrlType::GitHubIssue);
+
+        // Verify GitHub converter can parse the issue URL
+        let parsed_issue = converter.parse_github_url(issue_url).unwrap();
+        assert_eq!(parsed_issue.owner, "microsoft");
+        assert_eq!(parsed_issue.repo, "vscode");
+        assert_eq!(parsed_issue.number, 12345);
+
+        // Test GitHub pull request URL
+        let pr_url = "https://github.com/rust-lang/rust/pull/98765";
+        let detected_type = detector.detect_type(pr_url).unwrap();
+        assert_eq!(detected_type, UrlType::GitHubIssue);
+
+        // Verify GitHub converter can parse the PR URL
+        let parsed_pr = converter.parse_github_url(pr_url).unwrap();
+        assert_eq!(parsed_pr.owner, "rust-lang");
+        assert_eq!(parsed_pr.repo, "rust");
+        assert_eq!(parsed_pr.number, 98765);
     }
 }

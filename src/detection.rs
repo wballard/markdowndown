@@ -306,8 +306,9 @@ impl UrlDetector {
         // GitHub issue URLs have the pattern: /{owner}/{repo}/issues/{number}
         // Need exactly 4 or more segments: owner, repo, "issues", number
         if path_segments.len() >= 4 {
-            if let (Some(issues_segment), Some(number_segment)) = 
-                (path_segments.get(2), path_segments.get(3)) {
+            if let (Some(issues_segment), Some(number_segment)) =
+                (path_segments.get(2), path_segments.get(3))
+            {
                 if *issues_segment == "issues" && number_segment.parse::<u32>().is_ok() {
                     return true;
                 }

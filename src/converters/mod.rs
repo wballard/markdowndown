@@ -11,4 +11,4 @@ pub mod office365;
 
 // Re-export main converter types for convenience
 pub use html::HtmlConverter;
-pub use office365::Office365Converter;
+pub use office365::{Office365Config, Office365Converter};

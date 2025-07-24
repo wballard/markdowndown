@@ -49,6 +49,9 @@ use crate::frontmatter::FrontmatterBuilder;
 use crate::types::{Markdown, MarkdownError};
 use chrono::Utc;
 use std::collections::HashMap;
+use std::io::Write;
+use std::process::Command;
+use tempfile::NamedTempFile;
 use url::Url as ParsedUrl;
 
 /// Office 365 document types supported for conversion.
@@ -81,9 +84,15 @@ impl DocumentType {
     /// Returns the MIME type associated with this document type.
     pub fn mime_type(&self) -> &'static str {
         match self {
-            DocumentType::Word => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            DocumentType::PowerPoint => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            DocumentType::Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            DocumentType::Word => {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+            DocumentType::PowerPoint => {
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            }
+            DocumentType::Excel => {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
             DocumentType::Pdf => "application/pdf",
             DocumentType::Unknown => "application/octet-stream",
         }
@@ -133,6 +142,85 @@ pub enum Office365Service {
     OfficeOnline,
 }
 
+/// Configuration for external tools used by the Office 365 converter.
+#[derive(Debug, Clone)]
+pub struct Office365Config {
+    /// Path to the pandoc executable for Word document conversion
+    pub pandoc_path: String,
+    /// Additional arguments to pass to pandoc
+    pub pandoc_args: Vec<String>,
+    /// Path to python3 executable for PowerPoint/Excel conversion
+    pub python_path: String,
+    /// Whether to enable external tool conversion
+    pub enable_external_tools: bool,
+    /// Whether to extract media files during conversion
+    pub extract_media: bool,
+    /// Directory to extract media files to (relative to current directory)
+    pub media_dir: String,
+}
+
+impl Default for Office365Config {
+    fn default() -> Self {
+        Self {
+            pandoc_path: "pandoc".to_string(),
+            pandoc_args: vec!["--wrap=none".to_string(), "--extract-media=./".to_string()],
+            python_path: "python3".to_string(),
+            enable_external_tools: false,
+            extract_media: true,
+            media_dir: "./".to_string(),
+        }
+    }
+}
+
+impl Office365Config {
+    /// Creates a new Office365Config with external tools enabled and default paths.
+    pub fn with_external_tools() -> Self {
+        Self {
+            enable_external_tools: true,
+            ..Default::default()
+        }
+    }
+
+    /// Sets a custom pandoc executable path.
+    pub fn with_pandoc_path(mut self, path: impl Into<String>) -> Self {
+        self.pandoc_path = path.into();
+        self
+    }
+
+    /// Sets custom pandoc arguments.
+    pub fn with_pandoc_args(mut self, args: Vec<String>) -> Self {
+        self.pandoc_args = args;
+        self
+    }
+
+    /// Sets a custom python executable path.
+    pub fn with_python_path(mut self, path: impl Into<String>) -> Self {
+        self.python_path = path.into();
+        self
+    }
+
+    /// Sets the media extraction directory.
+    pub fn with_media_dir(mut self, dir: impl Into<String>) -> Self {
+        self.media_dir = dir.into();
+        // Update pandoc args to use the new media directory
+        for arg in &mut self.pandoc_args {
+            if arg.starts_with("--extract-media=") {
+                *arg = format!("--extract-media={}", self.media_dir);
+            }
+        }
+        self
+    }
+
+    /// Disables media extraction during conversion.
+    pub fn without_media_extraction(mut self) -> Self {
+        self.extract_media = false;
+        // Remove extract-media argument from pandoc args
+        self.pandoc_args
+            .retain(|arg| !arg.starts_with("--extract-media="));
+        self
+    }
+}
+
 /// Office 365 to markdown converter with intelligent URL handling and document processing.
 ///
 /// This converter handles various Office 365 URL formats and converts documents
@@ -142,8 +230,8 @@ pub enum Office365Service {
 pub struct Office365Converter {
     /// HTTP client for making requests to Office 365 services
     client: HttpClient,
-    /// Whether to attempt external tool conversion (requires pandoc, etc.)
-    enable_external_tools: bool,
+    /// Configuration for external tools and options
+    config: Office365Config,
 }
 
 impl Office365Converter {
@@ -163,7 +251,7 @@ impl Office365Converter {
     pub fn new() -> Self {
         Self {
             client: HttpClient::new(),
-            enable_external_tools: false,
+            config: Office365Config::default(),
         }
     }
 
@@ -182,7 +270,28 @@ impl Office365Converter {
     pub fn with_external_tools() -> Self {
         Self {
             client: HttpClient::new(),
-            enable_external_tools: true,
+            config: Office365Config::with_external_tools(),
+        }
+    }
+
+    /// Creates a new Office 365 converter with custom configuration.
+    ///
+    /// This allows full control over external tool paths, arguments, and options.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use markdowndown::converters::{Office365Converter, Office365Config};
+    ///
+    /// let config = Office365Config::with_external_tools()
+    ///     .with_pandoc_path("/usr/local/bin/pandoc")
+    ///     .with_media_dir("./media");
+    /// let converter = Office365Converter::with_config(config);
+    /// ```
+    pub fn with_config(config: Office365Config) -> Self {
+        Self {
+            client: HttpClient::new(),
+            config,
         }
     }
 
@@ -222,7 +331,7 @@ impl Office365Converter {
     /// let converter = Office365Converter::new();
     /// let url = "https://company.sharepoint.com/sites/team/Shared%20Documents/doc.docx";
     /// let markdown = converter.convert(url).await?;
-    /// 
+    ///
     /// // The result includes frontmatter with metadata
     /// assert!(markdown.as_str().contains("source_url:"));
     /// assert!(markdown.as_str().contains("document_type:"));
@@ -240,14 +349,25 @@ impl Office365Converter {
         let content_data = self.download_document(&download_url).await?;
 
         // Step 4: Convert document to markdown
-        let markdown_content = self.convert_document(&content_data, &document.document_type).await?;
+        let markdown_content = self
+            .convert_document(&content_data, &document.document_type)
+            .await?;
 
         // Step 5: Generate frontmatter
         let frontmatter = FrontmatterBuilder::new(url.to_string())
-            .exporter(format!("markdowndown-office365-{}", env!("CARGO_PKG_VERSION")))
+            .exporter(format!(
+                "markdowndown-office365-{}",
+                env!("CARGO_PKG_VERSION")
+            ))
             .download_date(Utc::now())
-            .additional_field("document_type".to_string(), self.document_type_string(&document.document_type))
-            .additional_field("service".to_string(), self.service_string(&document.service))
+            .additional_field(
+                "document_type".to_string(),
+                self.document_type_string(&document.document_type),
+            )
+            .additional_field(
+                "service".to_string(),
+                self.service_string(&document.service),
+            )
             .additional_field("tenant".to_string(), document.tenant.clone())
             .build()?;
 
@@ -283,9 +403,11 @@ impl Office365Converter {
             url: url.to_string(),
         })?;
 
-        let host = parsed_url.host_str().ok_or_else(|| MarkdownError::InvalidUrl {
-            url: url.to_string(),
-        })?;
+        let host = parsed_url
+            .host_str()
+            .ok_or_else(|| MarkdownError::InvalidUrl {
+                url: url.to_string(),
+            })?;
 
         // Parse different Office 365 service patterns
         if let Some(sharepoint_doc) = self.parse_sharepoint_url(&parsed_url, host)? {
@@ -314,20 +436,19 @@ impl Office365Converter {
     /// # Returns
     ///
     /// Returns a download URL string, or a `MarkdownError` if construction fails.
-    pub fn build_download_url(&self, document: &Office365Document) -> Result<String, MarkdownError> {
+    pub fn build_download_url(
+        &self,
+        document: &Office365Document,
+    ) -> Result<String, MarkdownError> {
         match document.service {
-            Office365Service::SharePoint => {
-                self.build_sharepoint_download_url(document)
-            }
+            Office365Service::SharePoint => self.build_sharepoint_download_url(document),
             Office365Service::OneDriveBusiness => {
                 self.build_onedrive_business_download_url(document)
             }
             Office365Service::OneDrivePersonal => {
                 self.build_onedrive_personal_download_url(document)
             }
-            Office365Service::OfficeOnline => {
-                self.build_office_online_download_url(document)
-            }
+            Office365Service::OfficeOnline => self.build_office_online_download_url(document),
         }
     }
 
@@ -358,7 +479,11 @@ impl Office365Converter {
     /// # Returns
     ///
     /// Returns markdown content as a string, or a `MarkdownError` on failure.
-    pub async fn convert_document(&self, data: &[u8], doc_type: &DocumentType) -> Result<String, MarkdownError> {
+    pub async fn convert_document(
+        &self,
+        data: &[u8],
+        doc_type: &DocumentType,
+    ) -> Result<String, MarkdownError> {
         if data.is_empty() {
             return Err(MarkdownError::ParseError {
                 message: "Document content is empty".to_string(),
@@ -370,17 +495,15 @@ impl Office365Converter {
             DocumentType::PowerPoint => self.convert_powerpoint_document(data).await,
             DocumentType::Excel => self.convert_excel_document(data).await,
             DocumentType::Pdf => self.convert_pdf_document(data).await,
-            DocumentType::Unknown => {
-                Err(MarkdownError::ParseError {
-                    message: "Cannot convert document of unknown type".to_string(),
-                })
-            }
+            DocumentType::Unknown => Err(MarkdownError::ParseError {
+                message: "Cannot convert document of unknown type".to_string(),
+            }),
         }
     }
 
     /// Detects document type from file path.
     pub fn detect_document_type(&self, path: &str) -> DocumentType {
-        if let Some(extension) = path.split('.').last() {
+        if let Some(extension) = path.split('.').next_back() {
             DocumentType::from_extension(extension)
         } else {
             DocumentType::Unknown
@@ -390,17 +513,21 @@ impl Office365Converter {
     // Private helper methods for URL parsing
 
     /// Parses SharePoint URLs.
-    fn parse_sharepoint_url(&self, parsed_url: &ParsedUrl, host: &str) -> Result<Option<Office365Document>, MarkdownError> {
+    fn parse_sharepoint_url(
+        &self,
+        parsed_url: &ParsedUrl,
+        host: &str,
+    ) -> Result<Option<Office365Document>, MarkdownError> {
         if !host.contains(".sharepoint.com") || host.contains("-my.sharepoint.com") {
             return Ok(None);
         }
 
         let tenant = host.split('.').next().unwrap_or("").to_string();
         let path = parsed_url.path();
-        
+
         // Extract site path and document path
         let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-        
+
         if path_segments.len() < 3 {
             return Ok(None);
         }
@@ -428,7 +555,11 @@ impl Office365Converter {
     }
 
     /// Parses OneDrive URLs (both business and personal).
-    fn parse_onedrive_url(&self, parsed_url: &ParsedUrl, host: &str) -> Result<Option<Office365Document>, MarkdownError> {
+    fn parse_onedrive_url(
+        &self,
+        parsed_url: &ParsedUrl,
+        host: &str,
+    ) -> Result<Option<Office365Document>, MarkdownError> {
         let service = if host.contains("-my.sharepoint.com") {
             Office365Service::OneDriveBusiness
         } else if host == "onedrive.live.com" {
@@ -460,7 +591,11 @@ impl Office365Converter {
     }
 
     /// Parses Office Online URLs.
-    fn parse_office_online_url(&self, parsed_url: &ParsedUrl, host: &str) -> Result<Option<Office365Document>, MarkdownError> {
+    fn parse_office_online_url(
+        &self,
+        parsed_url: &ParsedUrl,
+        host: &str,
+    ) -> Result<Option<Office365Document>, MarkdownError> {
         if !host.contains(".office.com") {
             return Ok(None);
         }
@@ -484,65 +619,135 @@ impl Office365Converter {
 
     /// Extracts URL parameters into a HashMap.
     fn extract_url_parameters(&self, parsed_url: &ParsedUrl) -> HashMap<String, String> {
-        parsed_url
-            .query_pairs()
-            .into_owned()
-            .collect()
+        parsed_url.query_pairs().into_owned().collect()
     }
 
     // Private helper methods for download URL construction
 
     /// Builds SharePoint download URL.
-    fn build_sharepoint_download_url(&self, document: &Office365Document) -> Result<String, MarkdownError> {
+    fn build_sharepoint_download_url(
+        &self,
+        document: &Office365Document,
+    ) -> Result<String, MarkdownError> {
         // SharePoint download URLs typically use the format:
         // https://{tenant}.sharepoint.com/{path}?download=1
-        let base_url = format!("https://{}.sharepoint.com{}", document.tenant, document.document_path);
+        let base_url = format!(
+            "https://{}.sharepoint.com{}",
+            document.tenant, document.document_path
+        );
         Ok(format!("{base_url}?download=1"))
     }
 
     /// Builds OneDrive for Business download URL.
-    fn build_onedrive_business_download_url(&self, document: &Office365Document) -> Result<String, MarkdownError> {
+    fn build_onedrive_business_download_url(
+        &self,
+        document: &Office365Document,
+    ) -> Result<String, MarkdownError> {
         // OneDrive for Business download URLs typically use:
         // https://{tenant}-my.sharepoint.com/{path}?download=1
-        let base_url = format!("https://{}-my.sharepoint.com{}", document.tenant, document.document_path);
+        let base_url = format!(
+            "https://{}-my.sharepoint.com{}",
+            document.tenant, document.document_path
+        );
         Ok(format!("{base_url}?download=1"))
     }
 
     /// Builds OneDrive Personal download URL.
-    fn build_onedrive_personal_download_url(&self, document: &Office365Document) -> Result<String, MarkdownError> {
+    fn build_onedrive_personal_download_url(
+        &self,
+        document: &Office365Document,
+    ) -> Result<String, MarkdownError> {
         // OneDrive Personal URLs are more complex and often require API calls
         // For now, return the original URL and let the HTTP client handle redirects
         Ok(document.original_url.clone())
     }
 
     /// Builds Office Online download URL.
-    fn build_office_online_download_url(&self, document: &Office365Document) -> Result<String, MarkdownError> {
+    fn build_office_online_download_url(
+        &self,
+        document: &Office365Document,
+    ) -> Result<String, MarkdownError> {
         // Office Online download URLs vary by document type
         Ok(document.original_url.clone())
     }
 
     // Private helper methods for document conversion
 
-    /// Converts Word documents to markdown.
-    async fn convert_word_document(&self, _data: &[u8]) -> Result<String, MarkdownError> {
-        if self.enable_external_tools {
-            // TODO: Implement pandoc integration
-            Err(MarkdownError::ParseError {
-                message: "Word document conversion requires pandoc (not yet implemented)".to_string(),
-            })
-        } else {
-            Err(MarkdownError::ParseError {
+    /// Converts Word documents to markdown using pandoc.
+    async fn convert_word_document(&self, data: &[u8]) -> Result<String, MarkdownError> {
+        if !self.config.enable_external_tools {
+            return Err(MarkdownError::ParseError {
                 message: "Word document conversion requires external tools. Use with_external_tools() and install pandoc.".to_string(),
-            })
+            });
         }
+
+        // Create a temporary file for the Word document
+        let mut temp_docx = NamedTempFile::new().map_err(|e| MarkdownError::ParseError {
+            message: format!("Failed to create temporary file for Word document: {e}"),
+        })?;
+
+        // Write the document data to the temporary file
+        temp_docx
+            .write_all(data)
+            .map_err(|e| MarkdownError::ParseError {
+                message: format!("Failed to write Word document data: {e}"),
+            })?;
+
+        // Build pandoc command using configuration
+        let mut cmd = Command::new(&self.config.pandoc_path);
+        cmd.arg("--from=docx").arg("--to=markdown");
+
+        // Add custom pandoc arguments from configuration
+        for arg in &self.config.pandoc_args {
+            cmd.arg(arg);
+        }
+
+        // Add the input file
+        cmd.arg(temp_docx.path());
+
+        let output = cmd.output().map_err(|e| MarkdownError::ParseError {
+            message: format!(
+                "Failed to execute pandoc at '{}' (ensure pandoc is installed): {e}",
+                self.config.pandoc_path
+            ),
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(MarkdownError::ParseError {
+                message: format!("Pandoc conversion failed: {stderr}"),
+            });
+        }
+
+        let markdown_content =
+            String::from_utf8(output.stdout).map_err(|e| MarkdownError::ParseError {
+                message: format!("Failed to parse pandoc output as UTF-8: {e}"),
+            })?;
+
+        // Clean up any excessive whitespace
+        let cleaned_content = markdown_content
+            .lines()
+            .map(|line| line.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+
+        if cleaned_content.is_empty() {
+            return Err(MarkdownError::ParseError {
+                message: "Pandoc conversion resulted in empty content".to_string(),
+            });
+        }
+
+        Ok(cleaned_content)
     }
 
     /// Converts PowerPoint documents to markdown.
     async fn convert_powerpoint_document(&self, _data: &[u8]) -> Result<String, MarkdownError> {
-        if self.enable_external_tools {
-            // TODO: Implement PowerPoint text extraction
+        if self.config.enable_external_tools {
+            // TODO: Implement PowerPoint text extraction using python-pptx
             Err(MarkdownError::ParseError {
-                message: "PowerPoint conversion requires python-pptx (not yet implemented)".to_string(),
+                message: format!("PowerPoint conversion requires python-pptx (not yet implemented). Python path: {}", self.config.python_path),
             })
         } else {
             Err(MarkdownError::ParseError {
@@ -553,10 +758,13 @@ impl Office365Converter {
 
     /// Converts Excel documents to markdown.
     async fn convert_excel_document(&self, _data: &[u8]) -> Result<String, MarkdownError> {
-        if self.enable_external_tools {
-            // TODO: Implement Excel table extraction
+        if self.config.enable_external_tools {
+            // TODO: Implement Excel table extraction using openpyxl
             Err(MarkdownError::ParseError {
-                message: "Excel conversion requires openpyxl (not yet implemented)".to_string(),
+                message: format!(
+                    "Excel conversion requires openpyxl (not yet implemented). Python path: {}",
+                    self.config.python_path
+                ),
             })
         } else {
             Err(MarkdownError::ParseError {
@@ -567,10 +775,10 @@ impl Office365Converter {
 
     /// Converts PDF documents to markdown.
     async fn convert_pdf_document(&self, _data: &[u8]) -> Result<String, MarkdownError> {
-        if self.enable_external_tools {
-            // TODO: Implement PDF text extraction
+        if self.config.enable_external_tools {
+            // TODO: Implement PDF text extraction using PyPDF2 or pdfplumber
             Err(MarkdownError::ParseError {
-                message: "PDF conversion requires PyPDF2 or pdfplumber (not yet implemented)".to_string(),
+                message: format!("PDF conversion requires PyPDF2 or pdfplumber (not yet implemented). Python path: {}", self.config.python_path),
             })
         } else {
             Err(MarkdownError::ParseError {
@@ -617,7 +825,10 @@ mod tests {
     fn test_document_type_from_extension() {
         assert_eq!(DocumentType::from_extension("docx"), DocumentType::Word);
         assert_eq!(DocumentType::from_extension("DOCX"), DocumentType::Word);
-        assert_eq!(DocumentType::from_extension("pptx"), DocumentType::PowerPoint);
+        assert_eq!(
+            DocumentType::from_extension("pptx"),
+            DocumentType::PowerPoint
+        );
         assert_eq!(DocumentType::from_extension("xlsx"), DocumentType::Excel);
         assert_eq!(DocumentType::from_extension("pdf"), DocumentType::Pdf);
         assert_eq!(DocumentType::from_extension("txt"), DocumentType::Unknown);
@@ -630,20 +841,73 @@ mod tests {
         assert_eq!(DocumentType::Excel.extension(), "xlsx");
         assert_eq!(DocumentType::Pdf.extension(), "pdf");
 
-        assert_eq!(DocumentType::Word.mime_type(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        assert_eq!(
+            DocumentType::Word.mime_type(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
         assert_eq!(DocumentType::Pdf.mime_type(), "application/pdf");
     }
 
     #[test]
     fn test_office365_converter_new() {
         let converter = Office365Converter::new();
-        assert!(!converter.enable_external_tools);
+        assert!(!converter.config.enable_external_tools);
+        assert_eq!(converter.config.pandoc_path, "pandoc");
+        assert_eq!(converter.config.python_path, "python3");
     }
 
     #[test]
     fn test_office365_converter_with_external_tools() {
         let converter = Office365Converter::with_external_tools();
-        assert!(converter.enable_external_tools);
+        assert!(converter.config.enable_external_tools);
+        assert_eq!(converter.config.pandoc_path, "pandoc");
+    }
+
+    #[test]
+    fn test_office365_converter_with_config() {
+        let config = Office365Config::with_external_tools()
+            .with_pandoc_path("/custom/pandoc")
+            .with_python_path("/custom/python")
+            .with_media_dir("./custom_media");
+
+        let converter = Office365Converter::with_config(config);
+        assert!(converter.config.enable_external_tools);
+        assert_eq!(converter.config.pandoc_path, "/custom/pandoc");
+        assert_eq!(converter.config.python_path, "/custom/python");
+        assert_eq!(converter.config.media_dir, "./custom_media");
+    }
+
+    #[test]
+    fn test_office365_config_default() {
+        let config = Office365Config::default();
+        assert!(!config.enable_external_tools);
+        assert_eq!(config.pandoc_path, "pandoc");
+        assert_eq!(config.python_path, "python3");
+        assert!(config.extract_media);
+        assert_eq!(config.media_dir, "./");
+        assert!(config.pandoc_args.contains(&"--wrap=none".to_string()));
+        assert!(config
+            .pandoc_args
+            .iter()
+            .any(|arg| arg.starts_with("--extract-media=")));
+    }
+
+    #[test]
+    fn test_office365_config_fluent_interface() {
+        let config = Office365Config::default()
+            .with_pandoc_path("/usr/bin/pandoc")
+            .with_python_path("/usr/bin/python3")
+            .with_media_dir("./documents")
+            .without_media_extraction();
+
+        assert_eq!(config.pandoc_path, "/usr/bin/pandoc");
+        assert_eq!(config.python_path, "/usr/bin/python3");
+        assert_eq!(config.media_dir, "./documents");
+        assert!(!config.extract_media);
+        assert!(!config
+            .pandoc_args
+            .iter()
+            .any(|arg| arg.starts_with("--extract-media=")));
     }
 
     #[test]
@@ -662,7 +926,8 @@ mod tests {
     #[test]
     fn test_parse_onedrive_business_url() {
         let converter = Office365Converter::new();
-        let url = "https://company-my.sharepoint.com/personal/user_company_com/Documents/document.xlsx";
+        let url =
+            "https://company-my.sharepoint.com/personal/user_company_com/Documents/document.xlsx";
         let result = converter.parse_office365_url(url).unwrap();
 
         assert_eq!(result.tenant, "company");
@@ -711,7 +976,8 @@ mod tests {
             site_path: Some("team".to_string()),
             document_path: "/sites/team/Shared%20Documents/doc.docx".to_string(),
             document_type: DocumentType::Word,
-            original_url: "https://company.sharepoint.com/sites/team/Shared%20Documents/doc.docx".to_string(),
+            original_url: "https://company.sharepoint.com/sites/team/Shared%20Documents/doc.docx"
+                .to_string(),
             parameters: HashMap::new(),
         };
 
@@ -723,12 +989,27 @@ mod tests {
     #[test]
     fn test_detect_document_type() {
         let converter = Office365Converter::new();
-        
-        assert_eq!(converter.detect_document_type("/path/to/document.docx"), DocumentType::Word);
-        assert_eq!(converter.detect_document_type("/path/to/presentation.pptx"), DocumentType::PowerPoint);
-        assert_eq!(converter.detect_document_type("/path/to/spreadsheet.xlsx"), DocumentType::Excel);
-        assert_eq!(converter.detect_document_type("/path/to/document.pdf"), DocumentType::Pdf);
-        assert_eq!(converter.detect_document_type("/path/to/file"), DocumentType::Unknown);
+
+        assert_eq!(
+            converter.detect_document_type("/path/to/document.docx"),
+            DocumentType::Word
+        );
+        assert_eq!(
+            converter.detect_document_type("/path/to/presentation.pptx"),
+            DocumentType::PowerPoint
+        );
+        assert_eq!(
+            converter.detect_document_type("/path/to/spreadsheet.xlsx"),
+            DocumentType::Excel
+        );
+        assert_eq!(
+            converter.detect_document_type("/path/to/document.pdf"),
+            DocumentType::Pdf
+        );
+        assert_eq!(
+            converter.detect_document_type("/path/to/file"),
+            DocumentType::Unknown
+        );
     }
 
     #[test]
@@ -739,7 +1020,7 @@ mod tests {
         // Test that conversion fails appropriately when external tools are disabled
         rt.block_on(async {
             let data = b"fake document data";
-            
+
             let result = converter.convert_word_document(data).await;
             assert!(result.is_err());
             assert!(result.unwrap_err().to_string().contains("external tools"));
@@ -765,11 +1046,17 @@ mod tests {
 
         rt.block_on(async {
             let data = b"fake document data";
-            
-            // Should fail with "not yet implemented" when external tools are enabled
+
+            // Should fail with pandoc-related error when external tools are enabled
+            // (either pandoc not found or conversion failure with fake data)
             let result = converter.convert_word_document(data).await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("not yet implemented"));
+            let error_msg = result.unwrap_err().to_string().to_lowercase();
+            assert!(
+                error_msg.contains("pandoc") || error_msg.contains("failed to execute"),
+                "Expected pandoc-related error, got: {}",
+                error_msg
+            );
         });
     }
 
@@ -792,7 +1079,9 @@ mod tests {
 
         rt.block_on(async {
             let data = b"some data";
-            let result = converter.convert_document(data, &DocumentType::Unknown).await;
+            let result = converter
+                .convert_document(data, &DocumentType::Unknown)
+                .await;
             assert!(result.is_err());
             assert!(result.unwrap_err().to_string().contains("unknown type"));
         });
@@ -801,7 +1090,7 @@ mod tests {
     #[test]
     fn test_default_implementation() {
         let converter = Office365Converter::default();
-        assert!(!converter.enable_external_tools);
+        assert!(!converter.config.enable_external_tools);
     }
 
     // Edge case tests for URL parsing
@@ -810,7 +1099,8 @@ mod tests {
         let converter = Office365Converter::new();
 
         // Test URLs with query parameters
-        let url_with_params = "https://company.sharepoint.com/sites/team/doc.docx?param1=value1&param2=value2";
+        let url_with_params =
+            "https://company.sharepoint.com/sites/team/doc.docx?param1=value1&param2=value2";
         let result = converter.parse_office365_url(url_with_params).unwrap();
         assert_eq!(result.parameters.get("param1"), Some(&"value1".to_string()));
         assert_eq!(result.parameters.get("param2"), Some(&"value2".to_string()));
@@ -830,7 +1120,7 @@ mod tests {
 
         for bad_url in &bad_urls {
             let result = converter.parse_office365_url(bad_url);
-            assert!(result.is_err(), "Should fail for URL: {}", bad_url);
+            assert!(result.is_err(), "Should fail for URL: {bad_url}");
         }
     }
 }

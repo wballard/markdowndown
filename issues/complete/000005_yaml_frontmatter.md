@@ -100,3 +100,63 @@ Page content here...
 - Timestamp formatting validation
 - Roundtrip serialization/deserialization
 - Integration with different converter types
+
+## Proposed Solution
+
+I have successfully implemented the YAML frontmatter generation functionality with the following approach:
+
+### Implementation Steps
+
+1. **Created `src/frontmatter.rs` module** with a comprehensive `FrontmatterBuilder` using the builder pattern
+   - Fluent interface for constructing frontmatter with required and optional fields
+   - Automatic validation of source URLs
+   - Support for additional custom fields beyond the core requirements
+
+2. **Implemented all required FrontmatterBuilder methods:**
+   - `new(source_url: String)` - Initialize with validated URL
+   - `exporter(exporter: String)` - Set processor name (defaults to "markdowndown")
+   - `download_date(date: DateTime<Utc>)` - Set timestamp (defaults to current time)
+   - `additional_field(key: String, value: String)` - Add custom metadata fields
+   - `build() -> Result<String, MarkdownError>` - Generate formatted YAML frontmatter
+
+3. **Created helper functions for frontmatter manipulation:**
+   - `combine_frontmatter_and_content()` - Merge frontmatter with markdown content
+   - `extract_frontmatter()` - Parse and extract frontmatter from markdown documents
+   - `strip_frontmatter()` - Remove frontmatter leaving only content
+
+4. **Extended the existing Markdown type** with three new methods:
+   - `with_frontmatter(&str) -> Markdown` - Create new instance with frontmatter prepended
+   - `frontmatter() -> Option<String>` - Extract frontmatter if present
+   - `content_only() -> String` - Return content without frontmatter
+
+5. **Comprehensive testing** with 74 passing tests covering:
+   - Builder pattern functionality and validation
+   - YAML serialization/deserialization roundtrips
+   - URL validation and escaping
+   - Timestamp formatting (ISO 8601)
+   - Integration with Markdown type
+   - Edge cases and error handling
+
+### Key Technical Decisions
+
+- **Leveraged existing `Frontmatter` struct** from `types.rs` which already had the required fields
+- **Used serde_yaml for serialization** (already available as dependency) for reliable YAML generation
+- **Implemented proper error handling** with `MarkdownError` for URL validation and YAML parsing failures  
+- **Followed builder pattern** for flexible and extensible frontmatter construction
+- **Maintained backward compatibility** with existing Markdown type functionality
+
+### Output Format Example
+
+```yaml
+---
+source_url: https://example.com/page.html
+exporter: markdowndown
+date_downloaded: 2025-07-24T14:35:21.518848Z
+title: Custom Field Example
+---
+
+# Document Content
+Content goes here...
+```
+
+All acceptance criteria have been fully met with comprehensive test coverage and proper integration with the existing codebase architecture.

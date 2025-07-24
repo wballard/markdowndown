@@ -24,6 +24,9 @@ pub mod client;
 /// Content converters for different formats
 pub mod converters;
 
+/// YAML frontmatter generation and manipulation utilities
+pub mod frontmatter;
+
 /// URL type detection and classification
 pub mod detection {}
 

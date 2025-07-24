@@ -157,6 +157,113 @@ impl Markdown {
             Ok(())
         }
     }
+
+    /// Creates a new Markdown instance with frontmatter prepended to the content.
+    ///
+    /// # Arguments
+    ///
+    /// * `frontmatter` - The YAML frontmatter string (should include delimiters)
+    ///
+    /// # Returns
+    ///
+    /// A new `Markdown` instance containing the frontmatter and original content
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use markdowndown::types::Markdown;
+    ///
+    /// let content = Markdown::new("# Hello World".to_string())?;
+    /// let frontmatter = "---\nsource_url: \"https://example.com\"\n---\n";
+    /// let with_frontmatter = content.with_frontmatter(frontmatter);
+    ///
+    /// assert!(with_frontmatter.as_str().contains("source_url"));
+    /// assert!(with_frontmatter.as_str().contains("# Hello World"));
+    /// # Ok::<(), markdowndown::types::MarkdownError>(())
+    /// ```
+    pub fn with_frontmatter(&self, frontmatter: &str) -> Markdown {
+        let combined_content = format!("{}\n{}", frontmatter, self.0);
+        Markdown(combined_content)
+    }
+
+    /// Extracts the frontmatter from the markdown content if present.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<String>` containing the YAML frontmatter (including delimiters)
+    /// if found, or `None` if no frontmatter is present.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use markdowndown::types::Markdown;
+    ///
+    /// let content = "---\nsource_url: \"https://example.com\"\n---\n\n# Hello World";
+    /// let markdown = Markdown::from(content.to_string());
+    /// let frontmatter = markdown.frontmatter();
+    ///
+    /// assert!(frontmatter.is_some());
+    /// assert!(frontmatter.unwrap().contains("source_url"));
+    /// ```
+    pub fn frontmatter(&self) -> Option<String> {
+        // Check if content starts with frontmatter delimiters
+        if !self.0.starts_with("---\n") {
+            return None;
+        }
+
+        // Find the closing delimiter
+        let content_after_start = &self.0[4..]; // Skip "---\n"
+        if let Some(end_pos) = content_after_start.find("\n---\n") {
+            let full_frontmatter = &self.0[..4 + end_pos + 5]; // Include both delimiters
+            Some(full_frontmatter.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Returns only the content portion of the markdown, stripping any frontmatter.
+    ///
+    /// # Returns
+    ///
+    /// A `String` containing only the markdown content without frontmatter
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use markdowndown::types::Markdown;
+    ///
+    /// let content = "---\nsource_url: \"https://example.com\"\n---\n\n# Hello World\n\nContent here.";
+    /// let markdown = Markdown::from(content.to_string());
+    /// let content_only = markdown.content_only();
+    ///
+    /// assert_eq!(content_only, "# Hello World\n\nContent here.");
+    /// ```
+    pub fn content_only(&self) -> String {
+        // Check if content starts with frontmatter delimiters
+        if !self.0.starts_with("---\n") {
+            return self.0.clone();
+        }
+
+        // Find the closing delimiter
+        let content_after_start = &self.0[4..]; // Skip "---\n"
+        if let Some(end_pos) = content_after_start.find("\n---\n") {
+            let content_start = 4 + end_pos + 5; // Skip "---\n" + frontmatter + "\n---\n"
+            if content_start < self.0.len() {
+                // Skip any leading newlines from the combination
+                let remaining = &self.0[content_start..];
+                if let Some(stripped) = remaining.strip_prefix('\n') {
+                    stripped.to_string()
+                } else {
+                    remaining.to_string()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            // No closing delimiter found, return original content
+            self.0.clone()
+        }
+    }
 }
 
 impl From<String> for Markdown {
@@ -356,6 +463,79 @@ mod tests {
     fn test_markdown_validation_whitespace_only() {
         let markdown = Markdown::from("   \n\t  ".to_string());
         assert!(markdown.validate().is_err());
+    }
+
+    #[test]
+    fn test_markdown_with_frontmatter() {
+        let content = Markdown::from("# Hello World\n\nThis is content.".to_string());
+        let frontmatter = "---\nsource_url: \"https://example.com\"\nexporter: markdowndown\n---\n";
+        let result = content.with_frontmatter(frontmatter);
+
+        assert!(result
+            .as_str()
+            .contains("source_url: \"https://example.com\""));
+        assert!(result.as_str().contains("# Hello World"));
+        assert!(result.as_str().starts_with("---\n"));
+    }
+
+    #[test]
+    fn test_markdown_frontmatter_extraction() {
+        let content =
+            "---\nsource_url: https://example.com\nexporter: markdowndown\n---\n\n# Hello World";
+        let markdown = Markdown::from(content.to_string());
+        let frontmatter = markdown.frontmatter();
+
+        assert!(frontmatter.is_some());
+        let fm = frontmatter.unwrap();
+        assert!(fm.contains("source_url: https://example.com"));
+        assert!(fm.starts_with("---\n"));
+        assert!(fm.ends_with("---\n"));
+    }
+
+    #[test]
+    fn test_markdown_frontmatter_extraction_none() {
+        let content = "# Hello World\n\nNo frontmatter here.";
+        let markdown = Markdown::from(content.to_string());
+        let frontmatter = markdown.frontmatter();
+
+        assert!(frontmatter.is_none());
+    }
+
+    #[test]
+    fn test_markdown_content_only() {
+        let content = "---\nsource_url: https://example.com\nexporter: markdowndown\n---\n\n# Hello World\n\nContent here.";
+        let markdown = Markdown::from(content.to_string());
+        let content_only = markdown.content_only();
+
+        assert_eq!(content_only, "# Hello World\n\nContent here.");
+        assert!(!content_only.contains("source_url"));
+    }
+
+    #[test]
+    fn test_markdown_content_only_no_frontmatter() {
+        let content = "# Hello World\n\nNo frontmatter here.";
+        let markdown = Markdown::from(content.to_string());
+        let content_only = markdown.content_only();
+
+        assert_eq!(content_only, content);
+    }
+
+    #[test]
+    fn test_markdown_frontmatter_roundtrip() {
+        let original_content = "# Test Document\n\nThis is test content.";
+        let frontmatter = "---\nsource_url: https://example.com\nexporter: markdowndown\n---\n";
+
+        let markdown = Markdown::from(original_content.to_string());
+        let with_frontmatter = markdown.with_frontmatter(frontmatter);
+
+        // Extract frontmatter back
+        let extracted_frontmatter = with_frontmatter.frontmatter();
+        assert!(extracted_frontmatter.is_some());
+        assert!(extracted_frontmatter.unwrap().contains("source_url"));
+
+        // Extract content back
+        let extracted_content = with_frontmatter.content_only();
+        assert_eq!(extracted_content, original_content);
     }
 
     #[test]

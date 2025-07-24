@@ -274,7 +274,18 @@ impl UrlDetector {
     ///
     /// Returns `Ok(())` if valid, or a `MarkdownError` if invalid.
     pub fn validate_url(&self, url: &str) -> Result<(), MarkdownError> {
-        self.parse_url(url)?;
+        let trimmed = url.trim();
+
+        // Basic validation - must be HTTP or HTTPS
+        if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+            return Err(MarkdownError::InvalidUrl {
+                url: url.to_string(),
+            });
+        }
+
+        ParsedUrl::parse(trimmed).map_err(|_parse_error| MarkdownError::InvalidUrl {
+            url: url.to_string(),
+        })?;
         Ok(())
     }
 
@@ -289,8 +300,13 @@ impl UrlDetector {
             });
         }
 
-        ParsedUrl::parse(trimmed).map_err(|_parse_error| MarkdownError::InvalidUrl {
-            url: url.to_string(),
+        ParsedUrl::parse(trimmed).map_err(|parse_error| MarkdownError::ParseError {
+            message: format!(
+                "Failed to parse URL '{url}' (length: {} chars, after trimming: '{}'): {}",
+                url.len(),
+                trimmed,
+                parse_error
+            ),
         })
     }
 
@@ -305,17 +321,9 @@ impl UrlDetector {
 
         // GitHub issue URLs have the pattern: /{owner}/{repo}/issues/{number}
         // Need exactly 4 or more segments: owner, repo, "issues", number
-        if path_segments.len() >= 4 {
-            if let (Some(issues_segment), Some(number_segment)) =
-                (path_segments.get(2), path_segments.get(3))
-            {
-                if *issues_segment == "issues" && number_segment.parse::<u32>().is_ok() {
-                    return true;
-                }
-            }
-        }
-
-        false
+        path_segments.len() >= 4
+            && path_segments[2] == "issues"
+            && path_segments[3].parse::<u32>().is_ok()
     }
 }
 
@@ -514,10 +522,10 @@ mod tests {
             assert!(result.is_err(), "Should fail for URL: {url}");
 
             match result.unwrap_err() {
-                MarkdownError::InvalidUrl { url: error_url } => {
-                    assert_eq!(error_url, *url);
+                MarkdownError::ParseError { message } => {
+                    assert!(message.contains(url));
                 }
-                _ => panic!("Expected InvalidUrl error for: {url}"),
+                _ => panic!("Expected ParseError error for: {url}"),
             }
         }
     }

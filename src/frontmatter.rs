@@ -169,6 +169,10 @@ impl FrontmatterBuilder {
     /// # Ok::<(), markdowndown::types::MarkdownError>(())
     /// ```
     pub fn build(self) -> Result<String, MarkdownError> {
+        // Store values for error messages before they get moved
+        let source_url_str = self.source_url.clone();
+        let additional_fields_count = self.additional_fields.len();
+
         // Validate and create URL
         let url = Url::new(self.source_url)?;
 
@@ -182,7 +186,12 @@ impl FrontmatterBuilder {
         // Serialize to YAML
         let mut yaml_content =
             serde_yaml::to_string(&frontmatter).map_err(|e| MarkdownError::ParseError {
-                message: format!("Failed to serialize frontmatter to YAML: {e}"),
+                message: format!(
+                    "Failed to serialize frontmatter to YAML (source URL: {}, {} additional fields): {}",
+                    source_url_str,
+                    additional_fields_count,
+                    e
+                ),
             })?;
 
         // Add additional fields if any
@@ -190,7 +199,11 @@ impl FrontmatterBuilder {
             // Parse the existing YAML to add additional fields
             let mut yaml_value: serde_yaml::Value =
                 serde_yaml::from_str(&yaml_content).map_err(|e| MarkdownError::ParseError {
-                    message: format!("Failed to parse generated YAML: {e}"),
+                    message: format!(
+                        "Failed to parse generated YAML (content length: {} chars): {}",
+                        yaml_content.len(),
+                        e
+                    ),
                 })?;
 
             if let serde_yaml::Value::Mapping(ref mut map) = yaml_value {
@@ -204,7 +217,11 @@ impl FrontmatterBuilder {
 
             yaml_content =
                 serde_yaml::to_string(&yaml_value).map_err(|e| MarkdownError::ParseError {
-                    message: format!("Failed to serialize extended frontmatter to YAML: {e}"),
+                    message: format!(
+                        "Failed to serialize extended frontmatter to YAML ({} additional fields added): {}",
+                        additional_fields_count,
+                        e
+                    ),
                 })?;
         }
 

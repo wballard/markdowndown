@@ -290,7 +290,12 @@ impl UrlDetector {
         }
 
         ParsedUrl::parse(trimmed).map_err(|parse_error| MarkdownError::ParseError {
-            message: format!("Failed to parse URL '{url}': {parse_error}"),
+            message: format!(
+                "Failed to parse URL '{url}' (length: {} chars, after trimming: '{}'): {}",
+                url.len(),
+                trimmed,
+                parse_error
+            ),
         })
     }
 
@@ -305,16 +310,9 @@ impl UrlDetector {
 
         // GitHub issue URLs have the pattern: /{owner}/{repo}/issues/{number}
         // Need exactly 4 or more segments: owner, repo, "issues", number
-        if path_segments.len() >= 4 {
-            if let (Some(issues_segment), Some(number_segment)) = 
-                (path_segments.get(2), path_segments.get(3)) {
-                if *issues_segment == "issues" && number_segment.parse::<u32>().is_ok() {
-                    return true;
-                }
-            }
-        }
-
-        false
+        path_segments.len() >= 4
+            && path_segments[2] == "issues"
+            && path_segments[3].parse::<u32>().is_ok()
     }
 }
 

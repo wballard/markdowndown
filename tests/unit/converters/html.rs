@@ -11,8 +11,7 @@ use mockito::Server;
 
 // Import shared test helpers
 use crate::helpers::converters::{
-    create_html_converter, create_html_converter_with_client,
-    SAMPLE_HTML_CONTENT,
+    create_html_converter, create_html_converter_with_client, SAMPLE_HTML_CONTENT,
 };
 
 /// Sample HTML with complex structure for testing preprocessing

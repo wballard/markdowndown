@@ -11,16 +11,16 @@ pub struct IntegrationTestConfig {
     // Rate limiting
     pub requests_per_minute: u32,
     pub request_delay_ms: u64,
-    
+
     // Timeouts
     pub default_timeout_secs: u64,
     pub large_document_timeout_secs: u64,
-    
+
     // Authentication
     pub github_token: Option<String>,
     pub office365_credentials: Option<Office365Credentials>,
     pub google_api_key: Option<String>,
-    
+
     // Test control
     pub skip_slow_tests: bool,
     pub skip_external_services: bool,
@@ -31,7 +31,6 @@ pub struct IntegrationTestConfig {
 #[derive(Debug, Clone)]
 pub struct Office365Credentials {
     pub username: String,
-    pub password: String,
 }
 
 impl IntegrationTestConfig {
@@ -143,8 +142,7 @@ impl IntegrationTestConfig {
     /// Parse Office 365 credentials from environment variables
     fn parse_office365_credentials() -> Option<Office365Credentials> {
         let username = env::var("OFFICE365_USERNAME").ok()?;
-        let password = env::var("OFFICE365_PASSWORD").ok()?;
-        Some(Office365Credentials { username, password })
+        Some(Office365Credentials { username })
     }
 }
 
@@ -161,38 +159,34 @@ impl TestUrls {
     /// Stable HTML test URLs that should remain accessible
     pub const HTML_TEST_URLS: &'static [(&'static str, &'static str)] = &[
         ("https://httpbin.org/html", "Simple HTML test page"),
-        ("https://en.wikipedia.org/wiki/Rust_(programming_language)", "Complex Wikipedia page"),
-        ("https://doc.rust-lang.org/book/ch01-00-getting-started.html", "Rust book chapter"),
-        ("https://github.com/rust-lang/rust/blob/master/README.md", "GitHub README"),
-    ];
-
-    /// Google Docs test URLs (public documents)
-    pub const GOOGLE_DOCS_TEST_URLS: &'static [(&'static str, &'static str)] = &[
-        // Note: These would need to be real public Google Docs URLs
-        // For now, using placeholder that should be replaced with actual test documents
-        ("https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit", "Example public Google Sheet (as placeholder)"),
+        (
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+            "Complex Wikipedia page",
+        ),
+        (
+            "https://doc.rust-lang.org/book/ch01-00-getting-started.html",
+            "Rust book chapter",
+        ),
+        (
+            "https://github.com/rust-lang/rust/blob/master/README.md",
+            "GitHub README",
+        ),
     ];
 
     /// GitHub test URLs for issues and pull requests
     pub const GITHUB_TEST_URLS: &'static [(&'static str, &'static str)] = &[
-        ("https://github.com/rust-lang/rust/issues/1", "Historic issue #1"),
-        ("https://github.com/tokio-rs/tokio/issues/1000", "Issue with discussions"),
-        ("https://github.com/serde-rs/serde/pull/2000", "Pull request example"),
-    ];
-
-    /// Office 365 test URLs (publicly accessible documents)
-    pub const OFFICE365_TEST_URLS: &'static [(&'static str, &'static str)] = &[
-        // Note: These would need to be real public SharePoint documents
-        // For now, using placeholders that should be replaced with actual test documents
-    ];
-
-    /// Error test URLs for testing failure scenarios
-    pub const ERROR_TEST_URLS: &'static [(&'static str, &'static str)] = &[
-        ("https://docs.google.com/document/d/nonexistent/edit", "Private/deleted Google document"),
-        ("https://github.com/nonexistent/repo/issues/1", "Non-existent GitHub repository"),
-        ("https://invalid-domain-12345.com/page", "DNS resolution failure"),
-        ("https://httpbin.org/status/404", "HTTP 404 error"),
-        ("https://httpbin.org/status/500", "HTTP 500 error"),
+        (
+            "https://github.com/rust-lang/rust/issues/1",
+            "Historic issue #1",
+        ),
+        (
+            "https://github.com/tokio-rs/tokio/issues/1000",
+            "Issue with discussions",
+        ),
+        (
+            "https://github.com/serde-rs/serde/pull/2000",
+            "Pull request example",
+        ),
     ];
 }
 
@@ -218,14 +212,17 @@ impl TestUtils {
 
     /// Validate that frontmatter contains expected fields
     pub fn validate_frontmatter(frontmatter: &str) -> bool {
-        frontmatter.contains("source_url") &&
-        frontmatter.contains("converted_at") &&
-        frontmatter.contains("conversion_type")
+        frontmatter.contains("source_url")
+            && frontmatter.contains("converted_at")
+            && frontmatter.contains("conversion_type")
     }
 
     /// Get a user agent string for testing
     pub fn test_user_agent() -> String {
-        format!("markdowndown-integration-tests/{}", env!("CARGO_PKG_VERSION"))
+        format!(
+            "markdowndown-integration-tests/{}",
+            env!("CARGO_PKG_VERSION")
+        )
     }
 }
 
@@ -237,7 +234,7 @@ mod tests {
     fn test_config_from_env_with_defaults() {
         // Test that config creation works even without environment variables
         let config = IntegrationTestConfig::from_env();
-        
+
         assert_eq!(config.requests_per_minute, 30);
         assert_eq!(config.request_delay_ms, 2000);
         assert_eq!(config.default_timeout_secs, 30);
@@ -248,7 +245,7 @@ mod tests {
     #[test]
     fn test_local_testing_config() {
         let config = IntegrationTestConfig::for_local_testing();
-        
+
         assert_eq!(config.requests_per_minute, 10);
         assert_eq!(config.request_delay_ms, 6000);
         assert!(!config.skip_slow_tests);
@@ -258,17 +255,22 @@ mod tests {
     #[test]
     fn test_ci_config() {
         let config = IntegrationTestConfig::for_ci();
-        
+
         assert_eq!(config.requests_per_minute, 60);
         assert_eq!(config.request_delay_ms, 1000);
         // CI should skip slow tests by default unless overridden
-        assert!(config.skip_slow_tests || env::var("SKIP_SLOW_TESTS").map(|s| s == "false").unwrap_or(false));
+        assert!(
+            config.skip_slow_tests
+                || env::var("SKIP_SLOW_TESTS")
+                    .map(|s| s == "false")
+                    .unwrap_or(false)
+        );
     }
 
     #[test]
     fn test_duration_helpers() {
         let config = IntegrationTestConfig::for_local_testing();
-        
+
         assert_eq!(config.request_delay(), Duration::from_millis(6000));
         assert_eq!(config.default_timeout(), Duration::from_secs(30));
         assert_eq!(config.large_document_timeout(), Duration::from_secs(120));
@@ -277,10 +279,13 @@ mod tests {
     #[test]
     fn test_capability_checks() {
         let config = IntegrationTestConfig::for_local_testing();
-        
+
         // These depend on environment variables, so we just test the logic
         assert_eq!(config.can_test_github(), config.github_token.is_some());
-        assert_eq!(config.can_test_office365(), config.office365_credentials.is_some());
+        assert_eq!(
+            config.can_test_office365(),
+            config.office365_credentials.is_some()
+        );
         assert!(config.can_test_google_docs()); // Should be true for local testing
         assert!(config.can_test_html()); // Should be true for local testing
     }
@@ -288,13 +293,19 @@ mod tests {
     #[test]
     fn test_validation_helpers() {
         // Test markdown quality validation
-        assert!(TestUtils::validate_markdown_quality("# Title\n\nThis is a substantial piece of content that should pass validation."));
+        assert!(TestUtils::validate_markdown_quality(
+            "# Title\n\nThis is a substantial piece of content that should pass validation."
+        ));
         assert!(!TestUtils::validate_markdown_quality(""));
         assert!(!TestUtils::validate_markdown_quality("Short"));
-        assert!(!TestUtils::validate_markdown_quality("Error: Something went wrong"));
+        assert!(!TestUtils::validate_markdown_quality(
+            "Error: Something went wrong"
+        ));
 
         // Test frontmatter validation
-        assert!(TestUtils::validate_frontmatter("source_url: test\nconverted_at: now\nconversion_type: html"));
+        assert!(TestUtils::validate_frontmatter(
+            "source_url: test\nconverted_at: now\nconversion_type: html"
+        ));
         assert!(!TestUtils::validate_frontmatter("missing_fields: true"));
     }
 

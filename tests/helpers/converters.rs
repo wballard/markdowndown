@@ -2,11 +2,11 @@
 
 use markdowndown::client::HttpClient;
 use markdowndown::config::Config;
+use markdowndown::config::PlaceholderSettings;
 use markdowndown::converters::{
     ConverterRegistry, GitHubIssueConverter, GoogleDocsConverter, HtmlConverter,
     HtmlConverterConfig, Office365Converter,
 };
-use markdowndown::config::PlaceholderSettings;
 use markdowndown::types::UrlType;
 use std::time::Duration;
 
@@ -250,10 +250,10 @@ mod tests {
 
     #[test]
     fn test_sample_content_constants() {
-        assert!(!SAMPLE_HTML_CONTENT.is_empty());
-        assert!(!SAMPLE_GITHUB_ISSUE_HTML.is_empty());
-        assert!(!SAMPLE_GOOGLE_DOCS_HTML.is_empty());
-        assert!(!SAMPLE_OFFICE365_HTML.is_empty());
+        assert!(SAMPLE_HTML_CONTENT.len() > 100);
+        assert!(SAMPLE_GITHUB_ISSUE_HTML.len() > 100);
+        assert!(SAMPLE_GOOGLE_DOCS_HTML.len() > 100);
+        assert!(SAMPLE_OFFICE365_HTML.len() > 100);
     }
 
     #[test]

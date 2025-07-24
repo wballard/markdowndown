@@ -203,7 +203,9 @@ impl Url {
     /// Returns a `MarkdownError::InvalidUrl` if the URL format is invalid.
     pub fn new(url: String) -> Result<Self, MarkdownError> {
         // Basic URL validation - must start with http:// or https:// and have content after
-        if (url.starts_with("http://") && url.len() > 7) || (url.starts_with("https://") && url.len() > 8) {
+        if (url.starts_with("http://") && url.len() > 7)
+            || (url.starts_with("https://") && url.len() > 8)
+        {
             Ok(Url(url))
         } else {
             Err(MarkdownError::InvalidUrl { url })
@@ -549,13 +551,12 @@ mod tests {
                 let markdown_result = Markdown::new(only_whitespace);
                 assert!(
                     markdown_result.is_err(),
-                    "Should reject Unicode whitespace: {:?}",
-                    whitespace
+                    "Should reject Unicode whitespace: {whitespace:?}"
                 );
             }
 
             // Test combinations of different whitespace characters
-            let mixed_whitespace = format!("  \u{2000}\u{3000}\t\n\u{00A0}  ");
+            let mixed_whitespace = "  \u{2000}\u{3000}\t\n\u{00A0}  ".to_string();
             let markdown_result = Markdown::new(mixed_whitespace);
             assert!(
                 markdown_result.is_err(),
@@ -580,8 +581,7 @@ mod tests {
                 let markdown_result = Markdown::new(case.to_string());
                 assert!(
                     markdown_result.is_ok(),
-                    "Should accept minimal valid content: {:?}",
-                    case
+                    "Should accept minimal valid content: {case:?}"
                 );
             }
         }
@@ -602,7 +602,7 @@ mod tests {
 
             for url_case in valid_url_cases {
                 let url_result = Url::new(url_case.to_string());
-                assert!(url_result.is_ok(), "Should accept valid URL: {}", url_case);
+                assert!(url_result.is_ok(), "Should accept valid URL: {url_case}");
             }
 
             let invalid_url_cases = [
@@ -618,11 +618,7 @@ mod tests {
 
             for url_case in invalid_url_cases {
                 let url_result = Url::new(url_case.to_string());
-                assert!(
-                    url_result.is_err(),
-                    "Should reject invalid URL: {}",
-                    url_case
-                );
+                assert!(url_result.is_err(), "Should reject invalid URL: {url_case}");
             }
         }
 

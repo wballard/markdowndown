@@ -1,0 +1,20 @@
+[package]
+name = "markdowndown"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust library for acquiring markdown from URLs with smart handling"
+authors = ["wballard <william@ballard.tech>"]
+license = "MIT"
+repository = "https://github.com/wballard/markdowndown"
+keywords = ["markdown", "url", "converter", "web"]
+categories = ["text-processing", "web-programming"]
+
+[lib]
+name = "markdowndown"
+crate-type = ["lib"]
+
+[dependencies]
+# No dependencies initially - this is the foundation step
+
+[dev-dependencies]
+# Development dependencies will be added as needed

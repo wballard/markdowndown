@@ -1,1 +1,24 @@
+# MCP logs
 mcp.log
+
+# Rust
+/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation build
+/doc/
+
+# Test coverage
+tarpaulin-report.html
+coverage/

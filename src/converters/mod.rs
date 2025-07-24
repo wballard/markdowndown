@@ -6,5 +6,9 @@
 /// HTML to markdown converter
 pub mod html;
 
+/// Google Docs to markdown converter
+pub mod google_docs;
+
 // Re-export main converter types for convenience
 pub use html::HtmlConverter;
+pub use google_docs::GoogleDocsConverter;

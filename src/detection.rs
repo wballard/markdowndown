@@ -310,7 +310,7 @@ impl UrlDetector {
         })
     }
 
-    /// Checks if a URL matches a specific GitHub issue pattern.
+    /// Checks if a URL matches a GitHub issue or pull request pattern.
     fn is_github_issue_url(&self, parsed_url: &ParsedUrl) -> bool {
         if parsed_url.host_str() != Some("github.com") {
             return false;
@@ -319,13 +319,15 @@ impl UrlDetector {
         let path = parsed_url.path();
         let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-        // GitHub issue URLs have the pattern: /{owner}/{repo}/issues/{number}
-        // Need exactly 4 or more segments: owner, repo, "issues", number
+        // GitHub issue/PR URLs have the pattern: /{owner}/{repo}/issues/{number} or /{owner}/{repo}/pull/{number}
+        // Need exactly 4 or more segments: owner, repo, "issues"/"pull", number
         if path_segments.len() >= 4 {
-            if let (Some(issues_segment), Some(number_segment)) =
+            if let (Some(resource_segment), Some(number_segment)) =
                 (path_segments.get(2), path_segments.get(3))
             {
-                if *issues_segment == "issues" && number_segment.parse::<u32>().is_ok() {
+                if (*resource_segment == "issues" || *resource_segment == "pull")
+                    && number_segment.parse::<u32>().is_ok()
+                {
                     return true;
                 }
             }
@@ -455,14 +457,17 @@ mod tests {
     }
 
     #[test]
-    fn test_github_issue_url_detection() {
+    fn test_github_issue_and_pr_url_detection() {
         let detector = UrlDetector::new();
 
-        // Valid GitHub issue URLs
+        // Valid GitHub issue and pull request URLs
         let valid_urls = [
             "https://github.com/owner/repo/issues/123",
             "https://github.com/microsoft/vscode/issues/42",
             "https://github.com/rust-lang/rust/issues/12345",
+            "https://github.com/owner/repo/pull/123",
+            "https://github.com/microsoft/vscode/pull/456",
+            "https://github.com/rust-lang/rust/pull/98765",
         ];
 
         for url in &valid_urls {
@@ -473,9 +478,11 @@ mod tests {
         // Invalid GitHub URLs (should fall back to HTML)
         let invalid_urls = [
             "https://github.com/owner/repo",
-            "https://github.com/owner/repo/pull/123",
             "https://github.com/owner/repo/issues",
             "https://github.com/owner/repo/issues/abc",
+            "https://github.com/owner/repo/pull",
+            "https://github.com/owner/repo/pull/abc",
+            "https://github.com/owner/repo/commits/123",
         ];
 
         for url in &invalid_urls {
@@ -493,8 +500,13 @@ mod tests {
         let result = detector.detect_type(url).unwrap();
         assert_eq!(result, UrlType::GoogleDocs);
 
-        // URL with fragment
+        // URL with fragment (issue)
         let url = "https://github.com/owner/repo/issues/123#issuecomment-456";
+        let result = detector.detect_type(url).unwrap();
+        assert_eq!(result, UrlType::GitHubIssue);
+
+        // URL with fragment (pull request)
+        let url = "https://github.com/owner/repo/pull/789#pullrequestreview-123";
         let result = detector.detect_type(url).unwrap();
         assert_eq!(result, UrlType::GitHubIssue);
 

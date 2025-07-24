@@ -15,10 +15,14 @@ pub mod postprocessor;
 /// HTML to markdown converter
 pub mod html;
 
+/// Google Docs to markdown converter
+pub mod google_docs;
+
 /// Placeholder converters for services not yet fully implemented
 pub mod placeholder;
 
 // Re-export main converter types for convenience
 pub use config::HtmlConverterConfig;
 pub use html::HtmlConverter;
-pub use placeholder::{GitHubIssueConverter, GoogleDocsConverter, Office365Converter};
+pub use google_docs::GoogleDocsConverter;
+pub use placeholder::{GitHubIssueConverter, Office365Converter};

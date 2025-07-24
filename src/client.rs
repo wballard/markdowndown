@@ -4,11 +4,11 @@
 //! and proper error mapping for the markdowndown library.
 
 use crate::types::MarkdownError;
+use bytes::Bytes;
 use reqwest::{Client, Response};
 use std::time::Duration;
 use tokio::time::sleep;
 use url::Url;
-use bytes::Bytes;
 
 /// HTTP client configuration with retry logic and error handling.
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ impl HttpClient {
     /// Fetches text content from a URL with retry logic.
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `url` - The URL to fetch content from
     ///
     /// # Returns
@@ -59,9 +59,11 @@ impl HttpClient {
     /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
     pub async fn get_text(&self, url: &str) -> Result<String, MarkdownError> {
         let response = self.retry_request(url).await?;
-        let text = response.text().await
+        let text = response
+            .text()
+            .await
             .map_err(|e| MarkdownError::NetworkError {
-                message: format!("Failed to read response body: {}", e),
+                message: format!("Failed to read response body: {e}"),
             })?;
         Ok(text)
     }
@@ -69,7 +71,7 @@ impl HttpClient {
     /// Fetches binary content from a URL with retry logic.
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `url` - The URL to fetch content from
     ///
     /// # Returns
@@ -83,9 +85,11 @@ impl HttpClient {
     /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
     pub async fn get_bytes(&self, url: &str) -> Result<Bytes, MarkdownError> {
         let response = self.retry_request(url).await?;
-        let bytes = response.bytes().await
+        let bytes = response
+            .bytes()
+            .await
             .map_err(|e| MarkdownError::NetworkError {
-                message: format!("Failed to read response body: {}", e),
+                message: format!("Failed to read response body: {e}"),
             })?;
         Ok(bytes)
     }
@@ -95,13 +99,18 @@ impl HttpClient {
     /// Implements exponential backoff for transient failures.
     async fn retry_request(&self, url: &str) -> Result<Response, MarkdownError> {
         // Validate URL format
-        let parsed_url = Url::parse(url)
-            .map_err(|_| MarkdownError::InvalidUrl { url: url.to_string() })?;
+        let parsed_url = Url::parse(url).map_err(|_| MarkdownError::InvalidUrl {
+            url: url.to_string(),
+        })?;
 
         // Ensure URL uses HTTP or HTTPS
         match parsed_url.scheme() {
-            "http" | "https" => {},
-            _ => return Err(MarkdownError::InvalidUrl { url: url.to_string() }),
+            "http" | "https" => {}
+            _ => {
+                return Err(MarkdownError::InvalidUrl {
+                    url: url.to_string(),
+                })
+            }
         }
 
         let mut last_error = None;
@@ -110,45 +119,61 @@ impl HttpClient {
             match self.client.get(url).send().await {
                 Ok(response) => {
                     let status = response.status();
-                    
+
                     // Check if this is a success or non-retryable error
                     if status.is_success() {
                         return Ok(response);
                     } else if status == 401 || status == 403 {
                         // Auth errors - don't retry
                         return Err(MarkdownError::AuthError {
-                            message: format!("Authentication failed: {} {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown")),
+                            message: format!(
+                                "Authentication failed: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
                         });
                     } else if status == 404 {
                         // Not found - don't retry
                         return Err(MarkdownError::NetworkError {
-                            message: format!("HTTP error: {} {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown")),
+                            message: format!(
+                                "HTTP error: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
                         });
                     } else if status.is_server_error() || status == 429 {
                         // Server errors and rate limiting - these are retryable
                         if attempt == self.max_retries {
                             return Err(MarkdownError::NetworkError {
-                                message: format!("HTTP error: {} {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown")),
+                                message: format!(
+                                    "HTTP error: {} {}",
+                                    status.as_u16(),
+                                    status.canonical_reason().unwrap_or("Unknown")
+                                ),
                             });
                         }
                         // Fall through to retry logic
                     } else {
                         // Other client errors - don't retry
                         return Err(MarkdownError::NetworkError {
-                            message: format!("HTTP error: {} {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown")),
+                            message: format!(
+                                "HTTP error: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            ),
                         });
                     }
                 }
                 Err(e) => {
                     last_error = Some(e);
-                    
+
                     // Don't retry on the last attempt
                     if attempt == self.max_retries {
                         break;
                     }
                 }
             }
-            
+
             // Calculate delay with exponential backoff
             let delay = self.base_delay * 2_u32.pow(attempt);
             sleep(delay).await;
@@ -167,19 +192,21 @@ impl HttpClient {
             }
         } else if error.is_connect() {
             MarkdownError::NetworkError {
-                message: format!("Connection failed: {}", error),
+                message: format!("Connection failed: {error}"),
             }
         } else if error.is_request() {
             MarkdownError::InvalidUrl {
-                url: error.url().map(|u| u.to_string()).unwrap_or_else(|| "unknown".to_string()),
+                url: error
+                    .url()
+                    .map(|u| u.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
             }
         } else {
             MarkdownError::NetworkError {
-                message: format!("HTTP request failed: {}", error),
+                message: format!("HTTP request failed: {error}"),
             }
         }
     }
-
 }
 
 impl Default for HttpClient {
@@ -191,8 +218,8 @@ impl Default for HttpClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
     use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn test_http_client_new() {
@@ -206,7 +233,7 @@ mod tests {
         // Setup mock server
         let mock_server = MockServer::start().await;
         let expected_body = "Hello, World!";
-        
+
         Mock::given(method("GET"))
             .and(path("/test"))
             .respond_with(ResponseTemplate::new(200).set_body_string(expected_body))
@@ -217,7 +244,7 @@ mod tests {
         let client = HttpClient::new();
         let url = format!("{}/test", mock_server.uri());
         let result = client.get_text(&url).await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), expected_body);
     }
@@ -227,7 +254,7 @@ mod tests {
         // Setup mock server
         let mock_server = MockServer::start().await;
         let expected_body = b"Binary data";
-        
+
         Mock::given(method("GET"))
             .and(path("/binary"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(expected_body))
@@ -238,7 +265,7 @@ mod tests {
         let client = HttpClient::new();
         let url = format!("{}/binary", mock_server.uri());
         let result = client.get_bytes(&url).await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap().as_ref(), expected_body);
     }
@@ -247,12 +274,12 @@ mod tests {
     async fn test_invalid_url_error() {
         let client = HttpClient::new();
         let result = client.get_text("not-a-valid-url").await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::InvalidUrl { url } => {
                 assert_eq!(url, "not-a-valid-url");
-            },
+            }
             _ => panic!("Expected InvalidUrl error"),
         }
     }
@@ -261,12 +288,12 @@ mod tests {
     async fn test_non_http_scheme_error() {
         let client = HttpClient::new();
         let result = client.get_text("ftp://example.com/file").await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::InvalidUrl { url } => {
                 assert_eq!(url, "ftp://example.com/file");
-            },
+            }
             _ => panic!("Expected InvalidUrl error"),
         }
     }
@@ -275,7 +302,7 @@ mod tests {
     async fn test_http_404_error() {
         // Setup mock server
         let mock_server = MockServer::start().await;
-        
+
         Mock::given(method("GET"))
             .and(path("/notfound"))
             .respond_with(ResponseTemplate::new(404))
@@ -286,12 +313,12 @@ mod tests {
         let client = HttpClient::new();
         let url = format!("{}/notfound", mock_server.uri());
         let result = client.get_text(&url).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::NetworkError { message } => {
                 assert!(message.contains("404"));
-            },
+            }
             _ => panic!("Expected NetworkError"),
         }
     }
@@ -300,7 +327,7 @@ mod tests {
     async fn test_http_401_auth_error() {
         // Setup mock server
         let mock_server = MockServer::start().await;
-        
+
         Mock::given(method("GET"))
             .and(path("/secure"))
             .respond_with(ResponseTemplate::new(401))
@@ -311,12 +338,12 @@ mod tests {
         let client = HttpClient::new();
         let url = format!("{}/secure", mock_server.uri());
         let result = client.get_text(&url).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::AuthError { message } => {
                 assert!(message.contains("401"));
-            },
+            }
             _ => panic!("Expected AuthError"),
         }
     }
@@ -325,7 +352,7 @@ mod tests {
     async fn test_http_403_auth_error() {
         // Setup mock server
         let mock_server = MockServer::start().await;
-        
+
         Mock::given(method("GET"))
             .and(path("/forbidden"))
             .respond_with(ResponseTemplate::new(403))
@@ -336,12 +363,12 @@ mod tests {
         let client = HttpClient::new();
         let url = format!("{}/forbidden", mock_server.uri());
         let result = client.get_text(&url).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::AuthError { message } => {
                 assert!(message.contains("403"));
-            },
+            }
             _ => panic!("Expected AuthError"),
         }
     }
@@ -350,14 +377,14 @@ mod tests {
     async fn test_retry_logic_eventual_success() {
         // Setup mock server that fails twice then succeeds
         let mock_server = MockServer::start().await;
-        
+
         Mock::given(method("GET"))
             .and(path("/flaky"))
             .respond_with(ResponseTemplate::new(500))
             .up_to_n_times(2)
             .mount(&mock_server)
             .await;
-            
+
         Mock::given(method("GET"))
             .and(path("/flaky"))
             .respond_with(ResponseTemplate::new(200).set_body_string("Success!"))
@@ -369,13 +396,12 @@ mod tests {
         client.base_delay = Duration::from_millis(10); // Speed up test
         let url = format!("{}/flaky", mock_server.uri());
         let result = client.get_text(&url).await;
-        
-        match &result {
-            Ok(content) => println!("Success: {}", content),
-            Err(e) => println!("Error: {:?}", e),
-        }
-        
-        assert!(result.is_ok(), "Expected success but got error: {:?}", result.err());
+
+        assert!(
+            result.is_ok(),
+            "Expected success but got error: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), "Success!");
     }
 
@@ -383,7 +409,7 @@ mod tests {
     async fn test_retry_logic_max_attempts_exceeded() {
         // Setup mock server that always fails
         let mock_server = MockServer::start().await;
-        
+
         Mock::given(method("GET"))
             .and(path("/always_fails"))
             .respond_with(ResponseTemplate::new(500))
@@ -395,12 +421,12 @@ mod tests {
         client.base_delay = Duration::from_millis(10); // Speed up test
         let url = format!("{}/always_fails", mock_server.uri());
         let result = client.get_text(&url).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             MarkdownError::NetworkError { message } => {
                 assert!(message.contains("500"));
-            },
+            }
             _ => panic!("Expected NetworkError"),
         }
     }

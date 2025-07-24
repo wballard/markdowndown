@@ -3,6 +3,7 @@
 //! This module provides a robust HTTP client with retry logic, timeout handling,
 //! and proper error mapping for the markdowndown library.
 
+use crate::config::{AuthConfig, HttpConfig};
 use crate::types::MarkdownError;
 use bytes::Bytes;
 use reqwest::{Client, Response};
@@ -16,6 +17,7 @@ pub struct HttpClient {
     client: Client,
     max_retries: u32,
     base_delay: Duration,
+    auth: AuthConfig,
 }
 
 impl HttpClient {
@@ -28,17 +30,36 @@ impl HttpClient {
     /// - Max retries: 3
     /// - Base delay: 1 second (with exponential backoff)
     pub fn new() -> Self {
+        let config = crate::config::Config::default();
+        Self::with_config(&config.http, &config.auth)
+    }
+
+    /// Creates a new HTTP client with custom configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `http_config` - HTTP client configuration options
+    /// * `auth_config` - Authentication configuration
+    ///
+    /// # Returns
+    ///
+    /// A new `HttpClient` instance configured with the provided settings.
+    ///
+    pub fn with_config(http_config: &HttpConfig, auth_config: &AuthConfig) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .redirect(reqwest::redirect::Policy::limited(10))
-            .user_agent("markdowndown/0.1.0")
+            .timeout(http_config.timeout)
+            .redirect(reqwest::redirect::Policy::limited(
+                http_config.max_redirects as usize,
+            ))
+            .user_agent(&http_config.user_agent)
             .build()
             .expect("Failed to create HTTP client");
 
         HttpClient {
             client,
-            max_retries: 3,
-            base_delay: Duration::from_secs(1),
+            max_retries: http_config.max_retries,
+            base_delay: http_config.retry_delay,
+            auth: auth_config.clone(),
         }
     }
 
@@ -116,7 +137,39 @@ impl HttpClient {
         let mut last_error = None;
 
         for attempt in 0..=self.max_retries {
-            match self.client.get(url).send().await {
+            let mut request = self.client.get(url);
+
+            // Add authentication headers based on URL domain
+            if let Some(github_token) = &self.auth.github_token {
+                if parsed_url
+                    .host_str()
+                    .map_or(false, |host| host.contains("github"))
+                {
+                    request = request.header("Authorization", format!("token {}", github_token));
+                }
+            }
+
+            if let Some(office365_token) = &self.auth.office365_token {
+                if parsed_url.host_str().map_or(false, |host| {
+                    host.contains("office.com")
+                        || host.contains("sharepoint.com")
+                        || host.contains("onedrive.com")
+                }) {
+                    request =
+                        request.header("Authorization", format!("Bearer {}", office365_token));
+                }
+            }
+
+            if let Some(google_api_key) = &self.auth.google_api_key {
+                if parsed_url
+                    .host_str()
+                    .map_or(false, |host| host.contains("googleapis.com"))
+                {
+                    request = request.header("Authorization", format!("Bearer {}", google_api_key));
+                }
+            }
+
+            match request.send().await {
                 Ok(response) => {
                     let status = response.status();
 

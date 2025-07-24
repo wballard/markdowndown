@@ -37,7 +37,7 @@ use crate::client::HttpClient;
 use crate::converters::ConverterRegistry;
 use crate::detection::UrlDetector;
 use crate::types::{Markdown, MarkdownError, UrlType};
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Main library struct providing unified URL to markdown conversion.
 ///
@@ -167,7 +167,7 @@ impl MarkdownDown {
     #[instrument(skip(self), fields(url_type))]
     pub async fn convert_url(&self, url: &str) -> Result<Markdown, MarkdownError> {
         info!("Starting URL conversion for: {}", url);
-        
+
         // Step 1: Normalize the URL
         debug!("Normalizing URL");
         let normalized_url = self.detector.normalize_url(url)?;
@@ -176,7 +176,7 @@ impl MarkdownDown {
         // Step 2: Detect URL type
         debug!("Detecting URL type");
         let url_type = self.detector.detect_type(&normalized_url)?;
-        tracing::Span::current().record("url_type", &format!("{}", url_type));
+        tracing::Span::current().record("url_type", format!("{url_type}"));
         info!("Detected URL type: {}", url_type);
 
         // Step 3: Get appropriate converter
@@ -193,21 +193,27 @@ impl MarkdownDown {
         info!("Starting conversion with {} converter", url_type);
         match converter.convert(&normalized_url).await {
             Ok(result) => {
-                info!("Successfully converted URL to markdown ({} chars)", result.as_str().len());
+                info!(
+                    "Successfully converted URL to markdown ({} chars)",
+                    result.as_str().len()
+                );
                 Ok(result)
             }
             Err(e) => {
                 error!("Primary converter failed: {}", e);
-                
+
                 // Step 5: Attempt fallback strategies for recoverable errors
                 if e.is_recoverable() && url_type != UrlType::Html {
                     warn!("Attempting HTML fallback conversion for recoverable error");
-                    
+
                     // Try HTML converter as fallback
                     if let Some(html_converter) = self.registry.get_converter(&UrlType::Html) {
                         match html_converter.convert(&normalized_url).await {
                             Ok(fallback_result) => {
-                                warn!("Fallback HTML conversion succeeded ({} chars)", fallback_result.as_str().len());
+                                warn!(
+                                    "Fallback HTML conversion succeeded ({} chars)",
+                                    fallback_result.as_str().len()
+                                );
                                 return Ok(fallback_result);
                             }
                             Err(fallback_error) => {
@@ -216,7 +222,7 @@ impl MarkdownDown {
                         }
                     }
                 }
-                
+
                 Err(e)
             }
         }

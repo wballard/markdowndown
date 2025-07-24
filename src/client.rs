@@ -86,21 +86,18 @@ impl HttpClient {
     pub async fn get_text(&self, url: &str) -> Result<String, MarkdownError> {
         debug!("Fetching text content from URL");
         let response = self.retry_request(url).await?;
-        
+
         debug!("Reading response body as text");
-        let text = response
-            .text()
-            .await
-            .map_err(|e| {
-                error!("Failed to read response body: {}", e);
-                let context = ErrorContext::new(url, "Read response body", "HttpClient")
-                    .with_info(format!("Error: {}", e));
-                MarkdownError::EnhancedNetworkError {
-                    kind: NetworkErrorKind::ConnectionFailed,
-                    context,
-                }
-            })?;
-        
+        let text = response.text().await.map_err(|e| {
+            error!("Failed to read response body: {}", e);
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
+
         info!("Successfully fetched text content ({} chars)", text.len());
         Ok(text)
     }
@@ -122,17 +119,14 @@ impl HttpClient {
     /// * `MarkdownError::AuthError` - For authentication failures (401, 403)
     pub async fn get_bytes(&self, url: &str) -> Result<Bytes, MarkdownError> {
         let response = self.retry_request(url).await?;
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| {
-                let context = ErrorContext::new(url, "Read response body", "HttpClient")
-                    .with_info(format!("Error: {}", e));
-                MarkdownError::EnhancedNetworkError {
-                    kind: NetworkErrorKind::ConnectionFailed,
-                    context,
-                }
-            })?;
+        let bytes = response.bytes().await.map_err(|e| {
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
         Ok(bytes)
     }
 
@@ -158,17 +152,14 @@ impl HttpClient {
         headers: &HashMap<String, String>,
     ) -> Result<String, MarkdownError> {
         let response = self.retry_request_with_headers(url, headers).await?;
-        let text = response
-            .text()
-            .await
-            .map_err(|e| {
-                let context = ErrorContext::new(url, "Read response body", "HttpClient")
-                    .with_info(format!("Error: {}", e));
-                MarkdownError::EnhancedNetworkError {
-                    kind: NetworkErrorKind::ConnectionFailed,
-                    context,
-                }
-            })?;
+        let text = response.text().await.map_err(|e| {
+            let context = ErrorContext::new(url, "Read response body", "HttpClient")
+                .with_info(format!("Error: {e}"));
+            MarkdownError::EnhancedNetworkError {
+                kind: NetworkErrorKind::ConnectionFailed,
+                context,
+            }
+        })?;
         Ok(text)
     }
 
@@ -227,7 +218,7 @@ impl HttpClient {
                             AuthErrorKind::PermissionDenied
                         };
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::AuthenticationError {
                             kind: auth_kind,
                             context,
@@ -235,7 +226,7 @@ impl HttpClient {
                     } else if status == 404 {
                         // Not found - don't retry
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::EnhancedNetworkError {
                             kind: NetworkErrorKind::ServerError(status.as_u16()),
                             context,
@@ -249,7 +240,11 @@ impl HttpClient {
                                 NetworkErrorKind::ServerError(status.as_u16())
                             };
                             let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                                .with_info(format!("HTTP status: {} after {} attempts", status, self.max_retries + 1));
+                                .with_info(format!(
+                                    "HTTP status: {} after {} attempts",
+                                    status,
+                                    self.max_retries + 1
+                                ));
                             return Err(MarkdownError::EnhancedNetworkError {
                                 kind: network_kind,
                                 context,
@@ -259,7 +254,7 @@ impl HttpClient {
                     } else {
                         // Other client errors - don't retry
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::EnhancedNetworkError {
                             kind: NetworkErrorKind::ServerError(status.as_u16()),
                             context,
@@ -292,7 +287,7 @@ impl HttpClient {
     #[instrument(skip(self), fields(attempt, max_retries = self.max_retries))]
     async fn retry_request(&self, url: &str) -> Result<Response, MarkdownError> {
         debug!("Starting HTTP request with retry logic");
-        
+
         // Validate URL format
         let parsed_url = Url::parse(url).map_err(|_| {
             error!("Invalid URL format: {}", url);
@@ -311,7 +306,7 @@ impl HttpClient {
             scheme => {
                 error!("Unsupported URL scheme: {}", scheme);
                 let context = ErrorContext::new(url, "URL scheme validation", "HttpClient")
-                    .with_info(format!("Unsupported scheme: {}", scheme));
+                    .with_info(format!("Unsupported scheme: {scheme}"));
                 return Err(MarkdownError::ValidationError {
                     kind: ValidationErrorKind::InvalidUrl,
                     context,
@@ -372,7 +367,7 @@ impl HttpClient {
                             AuthErrorKind::PermissionDenied
                         };
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::AuthenticationError {
                             kind: auth_kind,
                             context,
@@ -380,7 +375,7 @@ impl HttpClient {
                     } else if status == 404 {
                         // Not found - don't retry
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::EnhancedNetworkError {
                             kind: NetworkErrorKind::ServerError(status.as_u16()),
                             context,
@@ -394,7 +389,11 @@ impl HttpClient {
                                 NetworkErrorKind::ServerError(status.as_u16())
                             };
                             let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                                .with_info(format!("HTTP status: {} after {} attempts", status, self.max_retries + 1));
+                                .with_info(format!(
+                                    "HTTP status: {} after {} attempts",
+                                    status,
+                                    self.max_retries + 1
+                                ));
                             return Err(MarkdownError::EnhancedNetworkError {
                                 kind: network_kind,
                                 context,
@@ -404,7 +403,7 @@ impl HttpClient {
                     } else {
                         // Other client errors - don't retry
                         let context = ErrorContext::new(url, "HTTP request", "HttpClient")
-                            .with_info(format!("HTTP status: {}", status));
+                            .with_info(format!("HTTP status: {status}"));
                         return Err(MarkdownError::EnhancedNetworkError {
                             kind: NetworkErrorKind::ServerError(status.as_u16()),
                             context,
@@ -447,21 +446,22 @@ impl HttpClient {
             }
         } else if error.is_connect() {
             let context = ErrorContext::new(&url_from_error, "HTTP request", "HttpClient")
-                .with_info(format!("Connection error: {}", error));
+                .with_info(format!("Connection error: {error}"));
             MarkdownError::EnhancedNetworkError {
                 kind: NetworkErrorKind::ConnectionFailed,
                 context,
             }
         } else if error.is_request() {
-            let context = ErrorContext::new(&url_from_error, "HTTP request validation", "HttpClient")
-                .with_info(format!("Request error: {}", error));
+            let context =
+                ErrorContext::new(&url_from_error, "HTTP request validation", "HttpClient")
+                    .with_info(format!("Request error: {error}"));
             MarkdownError::ValidationError {
                 kind: ValidationErrorKind::InvalidUrl,
                 context,
             }
         } else {
             let context = ErrorContext::new(&url_from_error, "HTTP request", "HttpClient")
-                .with_info(format!("Request failed: {}", error));
+                .with_info(format!("Request failed: {error}"));
             MarkdownError::EnhancedNetworkError {
                 kind: NetworkErrorKind::ConnectionFailed,
                 context,
@@ -579,14 +579,12 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::EnhancedNetworkError { kind, context: _ } => {
-                match kind {
-                    NetworkErrorKind::ServerError(status) => {
-                        assert_eq!(status, 404);
-                    }
-                    _ => panic!("Expected ServerError(404)"),
+            MarkdownError::EnhancedNetworkError { kind, context: _ } => match kind {
+                NetworkErrorKind::ServerError(status) => {
+                    assert_eq!(status, 404);
                 }
-            }
+                _ => panic!("Expected ServerError(404)"),
+            },
             _ => panic!("Expected EnhancedNetworkError"),
         }
     }
@@ -692,14 +690,12 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MarkdownError::EnhancedNetworkError { kind, context: _ } => {
-                match kind {
-                    NetworkErrorKind::ServerError(status) => {
-                        assert_eq!(status, 500);
-                    }
-                    _ => panic!("Expected ServerError(500)"),
+            MarkdownError::EnhancedNetworkError { kind, context: _ } => match kind {
+                NetworkErrorKind::ServerError(status) => {
+                    assert_eq!(status, 500);
                 }
-            }
+                _ => panic!("Expected ServerError(500)"),
+            },
             _ => panic!("Expected EnhancedNetworkError"),
         }
     }

@@ -14,7 +14,10 @@ name = "markdowndown"
 crate-type = ["lib"]
 
 [dependencies]
-# No dependencies initially - this is the foundation step
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde_yaml = "0.9"
+thiserror = "1.0"
 
 [dev-dependencies]
 # Development dependencies will be added as needed

@@ -16,7 +16,7 @@
 //! - Unified public API for simple integration
 
 /// Core types, traits, and error definitions
-pub mod types {}
+pub mod types;
 
 /// HTTP client wrapper for network operations
 pub mod client {}

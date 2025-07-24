@@ -93,3 +93,47 @@ classDiagram
 - URLs with query parameters and fragments
 - Shortened URLs and redirects
 - International domain names (IDN)
+
+
+## Proposed Solution
+
+I will implement the URL detection functionality using a pattern-based approach:
+
+### Implementation Strategy
+
+1. **UrlDetector Structure**: Create a struct that contains configurable URL patterns for each supported URL type. This will use regex patterns to match domains and paths.
+
+2. **Pattern Matching System**: Each URL type will have specific patterns:
+   - **Google Docs**: Match `docs.google.com/document/` and `drive.google.com/file/` domains
+   - **Office 365**: Match `*.sharepoint.com/`, `onedrive.live.com/`, and `*.office.com/` patterns
+   - **GitHub Issues**: Match `github.com/{owner}/{repo}/issues/{number}` pattern using regex
+   - **Generic HTML**: Default fallback for any other HTTP/HTTPS URLs
+
+3. **URL Normalization**: Implement URL cleaning that:
+   - Trims whitespace and normalizes scheme (ensure https://)
+   - Removes common tracking parameters (`utm_*`, `ref`, etc.)
+   - Validates URL structure using existing `Url::new()` validation
+   - Handles basic redirect detection patterns
+
+4. **Error Handling**: Use existing `MarkdownError` types for consistent error reporting
+
+5. **Testing Strategy**: Create comprehensive unit tests covering:
+   - All URL pattern variations
+   - Edge cases (malformed URLs, custom domains)
+   - Normalization edge cases
+   - Performance validation
+
+### Architecture Design
+
+The `UrlDetector` will be stateless and use compiled regex patterns for efficient matching. It will integrate seamlessly with existing types and error handling patterns in the codebase.
+
+### Implementation Steps
+
+1. Create the `Pattern` struct to hold domain/path regex patterns
+2. Implement `UrlDetector` with pattern compilation in `new()`
+3. Add detection logic in `detect_type()` method
+4. Implement URL normalization and validation methods
+5. Create comprehensive test suite covering all requirements
+6. Integrate with existing type system and error handling
+
+This approach provides extensibility for future URL types while maintaining high performance through compiled regex patterns.

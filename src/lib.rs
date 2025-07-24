@@ -28,7 +28,7 @@ pub mod converters;
 pub mod frontmatter;
 
 /// URL type detection and classification
-pub mod detection {}
+pub mod detection;
 
 /// Handler implementations for different URL types
 pub mod handlers {

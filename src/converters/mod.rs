@@ -6,5 +6,9 @@
 /// HTML to markdown converter
 pub mod html;
 
+/// GitHub Issues to markdown converter
+pub mod github;
+
 // Re-export main converter types for convenience
 pub use html::HtmlConverter;
+pub use github::GitHubConverter;

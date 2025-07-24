@@ -259,3 +259,40 @@ async fn test_error_scenarios() -> Result<(), Box<dyn std::error::Error>> {
 3. **Service Changes**: Monitor external services for API changes
 4. **Test Data Refresh**: Update test documents and expected outputs
 5. **Rate Limit Monitoring**: Ensure tests don't exceed service limits
+
+## Proposed Solution
+
+Based on analysis of the existing codebase, I will implement comprehensive integration tests that test the library with real external services. The approach will be:
+
+### Implementation Strategy
+
+1. **Create Integration Test Directory Structure**:
+   - Create `tests/integration/` directory with organized test modules
+   - Each service type gets its own module (html_sites.rs, google_docs.rs, etc.)
+   - Shared configuration and utilities in common module
+
+2. **Configuration-Driven Testing**:
+   - Environment variable-based configuration for credentials and settings
+   - Rate limiting to respect external service limits
+   - Skip flags for CI environments without credentials
+   - Configurable timeouts and retry behavior
+
+3. **Test Implementation Approach**:
+   - Use Test-Driven Development with real URLs and expected outcomes
+   - Focus on content quality validation, not just successful conversion
+   - Test error scenarios with invalid/unavailable URLs
+   - Performance benchmarking with realistic content sizes
+
+4. **Service-Specific Testing**:
+   - HTML sites: Test with stable, well-known sites (Wikipedia, documentation)
+   - Google Docs: Use public test documents with various content types
+   - GitHub: Test with public repositories, issues, and pull requests
+   - Office 365: Test with publicly accessible SharePoint documents
+
+5. **Quality Assurance**:
+   - Validate markdown output structure and frontmatter
+   - Test conversion accuracy and completeness
+   - Measure and track performance metrics
+   - Ensure reliable test execution across different environments
+
+The implementation will follow the existing codebase patterns, use the established MarkdownDown API, and integrate seamlessly with the current test framework using tokio-test and other existing dependencies.

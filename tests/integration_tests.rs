@@ -8,6 +8,9 @@ mod helpers;
 mod mocks;
 mod unit;
 
+// Import integration test modules
+mod integration;
+
 // Re-export for easy access in test modules
 pub use fixtures::*;
 pub use helpers::*;

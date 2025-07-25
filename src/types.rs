@@ -376,7 +376,7 @@ impl Url {
         }
 
         // Check for local file paths
-        if Self::is_local_file_path(&url) {
+        if crate::utils::is_local_file_path(&url) {
             return Ok(Url(url));
         }
 
@@ -391,41 +391,6 @@ impl Url {
     /// Returns the URL as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    /// Checks if a string represents a local file path or file:// URL.
-    fn is_local_file_path(input: &str) -> bool {
-        // Check for absolute paths (Unix-style), but not protocol-relative URLs
-        if input.starts_with('/') && !input.starts_with("//") {
-            return true;
-        }
-
-        // Check for relative paths
-        if input.starts_with("./") || input.starts_with("../") {
-            return true;
-        }
-
-        // Check for Windows-style absolute paths (C:\, D:\, etc.)
-        if input.len() >= 3
-            && input.chars().nth(1) == Some(':')
-            && (input.chars().nth(2) == Some('\\') || input.chars().nth(2) == Some('/'))
-            && input
-                .chars()
-                .nth(0)
-                .map_or(false, |c| c.is_ascii_alphabetic())
-        {
-            return true;
-        }
-
-        // Check for file paths that don't look like URLs (no protocol)
-        if !input.contains("://") && (input.contains('/') || input.contains('\\')) {
-            // Don't treat domain-like patterns as local files unless they clearly look like paths
-            return !input.starts_with("www.")
-                && !input.contains("://")
-                && (input.starts_with('.') || input.contains('/') || input.contains('\\'));
-        }
-
-        false
     }
 }
 
@@ -1220,6 +1185,11 @@ mod tests {
                 "https://sub.domain.com/path?query=value#fragment",
                 "http://user:pass@example.com",
                 "https://example.com:443/very/long/path/with/many/segments",
+                "file:///absolute/path/to/file.md",  // Local file URL (absolute)
+                "file://./relative/path.md",         // Local file URL (relative)
+                "/absolute/path/to/file.md",         // Local file path (absolute)
+                "./relative/file.md",                // Local file path (relative)
+                "document.md",                       // Simple filename
             ];
 
             for url_case in valid_url_cases {
@@ -1229,10 +1199,9 @@ mod tests {
 
             let invalid_url_cases = [
                 "ftp://example.com",       // Wrong protocol
-                "example.com",             // Missing protocol
-                "www.example.com",         // Missing protocol
+                "example.com",             // Missing protocol (domain without protocol)
+                "www.example.com",         // Missing protocol (domain without protocol)
                 "mailto:test@example.com", // Wrong protocol
-                "file:///path/to/file",    // Wrong protocol
                 "",                        // Empty string
                 "http://",                 // Incomplete
                 "https://",                // Incomplete

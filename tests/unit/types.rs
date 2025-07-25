@@ -192,7 +192,6 @@ mod url_tests {
         let invalid_urls = [
             "ftp://example.com",
             "mailto:test@example.com",
-            "file:///path/to/file",
             "ws://example.com",
         ];
 

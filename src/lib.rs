@@ -33,6 +33,9 @@ pub mod detection;
 /// Configuration system
 pub mod config;
 
+/// Utility functions shared across the codebase
+pub mod utils;
+
 use crate::client::HttpClient;
 use crate::converters::ConverterRegistry;
 use crate::detection::UrlDetector;

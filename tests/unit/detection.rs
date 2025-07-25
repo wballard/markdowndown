@@ -537,7 +537,6 @@ mod url_validation_tests {
             "not-a-url",
             "ftp://example.com",
             "mailto:test@example.com",
-            "file:///path/to/file",
             "javascript:alert('xss')",
             "data:text/html,<h1>Test</h1>",
             "",

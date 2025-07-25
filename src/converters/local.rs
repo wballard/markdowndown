@@ -17,7 +17,7 @@ use tracing::{debug, info, instrument};
 /// - `../parent/relative/path.md`
 /// - `file:///absolute/path/to/file.md`
 /// - `file://./relative/path.md`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LocalFileConverter;
 
 impl LocalFileConverter {
@@ -38,11 +38,11 @@ impl LocalFileConverter {
     fn normalize_path(&self, input: &str) -> String {
         // Handle file:// URLs by stripping the protocol
         if input.starts_with("file://") {
-            let path_part = &input[7..]; // Remove "file://"
+            let path_part = input.strip_prefix("file://").unwrap();
 
             // Handle file:///absolute/path case (three slashes for absolute paths)
             if input.starts_with("file:///") {
-                format!("/{}", &input[8..]) // Remove "file://" and keep the leading /
+                format!("/{}", input.strip_prefix("file:///").unwrap()) // Remove "file:///" and keep the leading /
             } else {
                 // Handle file://./relative or file://../relative
                 path_part.to_string()
@@ -86,7 +86,7 @@ impl LocalFileConverter {
             Ok(content) => Ok(content),
             Err(e) => {
                 let context = ErrorContext::new(path, "File reading", "LocalFileConverter")
-                    .with_info(format!("IO error: {}", e));
+                    .with_info(format!("IO error: {e}"));
 
                 match e.kind() {
                     std::io::ErrorKind::NotFound => Err(MarkdownError::ContentError {
@@ -150,7 +150,7 @@ impl super::Converter for LocalFileConverter {
         let markdown = Markdown::new(content).map_err(|e| {
             let context =
                 ErrorContext::new(&file_path, "Markdown validation", "LocalFileConverter")
-                    .with_info(format!("Validation error: {}", e));
+                    .with_info(format!("Validation error: {e}"));
             MarkdownError::ContentError {
                 kind: ContentErrorKind::ParsingFailed,
                 context,
@@ -166,12 +166,6 @@ impl super::Converter for LocalFileConverter {
 
     fn name(&self) -> &'static str {
         "Local File Converter"
-    }
-}
-
-impl Default for LocalFileConverter {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

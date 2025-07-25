@@ -197,7 +197,7 @@ impl UrlDetector {
         let trimmed = url.trim();
 
         // Check for local file paths first (before trying to parse as URL)
-        if self.is_local_file_path(trimmed) {
+        if crate::utils::is_local_file_path(trimmed) {
             return Ok(UrlType::LocalFile);
         }
 
@@ -239,7 +239,7 @@ impl UrlDetector {
         let trimmed = url.trim();
 
         // Handle local file paths separately (no URL parsing needed)
-        if self.is_local_file_path(trimmed) {
+        if crate::utils::is_local_file_path(trimmed) {
             return Ok(trimmed.to_string());
         }
 
@@ -286,7 +286,7 @@ impl UrlDetector {
         let trimmed = url.trim();
 
         // Allow local file paths
-        if self.is_local_file_path(trimmed) {
+        if crate::utils::is_local_file_path(trimmed) {
             return Ok(());
         }
 
@@ -332,33 +332,6 @@ impl UrlDetector {
                 context,
             }
         })
-    }
-
-    /// Checks if a string represents a local file path or file:// URL.
-    fn is_local_file_path(&self, input: &str) -> bool {
-        // Check for absolute paths (Unix-style), but not protocol-relative URLs
-        if input.starts_with('/') && !input.starts_with("//") {
-            return true;
-        }
-
-        // Check for relative paths
-        if input.starts_with("./") || input.starts_with("../") {
-            return true;
-        }
-
-        // Check for Windows-style absolute paths (C:\, D:\, etc.)
-        if input.len() >= 3
-            && input.chars().nth(1) == Some(':')
-            && (input.chars().nth(2) == Some('\\') || input.chars().nth(2) == Some('/'))
-            && input
-                .chars()
-                .nth(0)
-                .map_or(false, |c| c.is_ascii_alphabetic())
-        {
-            return true;
-        }
-
-        false
     }
 
     /// Checks if a URL matches a GitHub issue or pull request pattern.

@@ -62,7 +62,7 @@ impl ConverterRegistry {
         );
         registry.register(
             UrlType::GitHubIssue,
-            Box::new(super::placeholder::GitHubIssueConverter::new()),
+            Box::new(super::GitHubConverter::from_env()),
         );
 
         registry
@@ -103,12 +103,7 @@ impl ConverterRegistry {
         );
         registry.register(
             UrlType::GitHubIssue,
-            Box::new(
-                super::placeholder::GitHubIssueConverter::with_client_and_settings(
-                    http_client,
-                    placeholder_settings,
-                ),
-            ),
+            Box::new(super::GitHubConverter::from_env()),
         );
 
         registry

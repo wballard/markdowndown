@@ -554,8 +554,8 @@ mod url_validation_tests {
             assert!(result.is_err(), "Should reject URL: {url}");
 
             match result.unwrap_err() {
-                MarkdownError::InvalidUrl { url: error_url } => {
-                    assert_eq!(error_url, url);
+                MarkdownError::ValidationError { kind, .. } => {
+                    assert_eq!(kind, markdowndown::types::ValidationErrorKind::InvalidUrl);
                 }
                 _ => panic!("Expected InvalidUrl error for: {url}"),
             }

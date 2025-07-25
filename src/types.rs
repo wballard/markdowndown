@@ -368,23 +368,64 @@ impl Url {
     ///
     /// Returns a `MarkdownError::InvalidUrl` if the URL format is invalid.
     pub fn new(url: String) -> Result<Self, MarkdownError> {
-        // Basic URL validation - must start with http:// or https:// and have content after
+        // Check for HTTP/HTTPS URLs
         if (url.starts_with("http://") && url.len() > 7)
             || (url.starts_with("https://") && url.len() > 8)
         {
-            Ok(Url(url))
-        } else {
-            let context = ErrorContext::new(&url, "URL validation", "Url::new");
-            Err(MarkdownError::ValidationError {
-                kind: ValidationErrorKind::InvalidUrl,
-                context,
-            })
+            return Ok(Url(url));
         }
+
+        // Check for local file paths
+        if Self::is_local_file_path(&url) {
+            return Ok(Url(url));
+        }
+
+        // If neither web URL nor local file path, it's invalid
+        let context = ErrorContext::new(&url, "URL validation", "Url::new");
+        Err(MarkdownError::ValidationError {
+            kind: ValidationErrorKind::InvalidUrl,
+            context,
+        })
     }
 
     /// Returns the URL as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Checks if a string represents a local file path or file:// URL.
+    fn is_local_file_path(input: &str) -> bool {
+        // Check for absolute paths (Unix-style), but not protocol-relative URLs
+        if input.starts_with('/') && !input.starts_with("//") {
+            return true;
+        }
+
+        // Check for relative paths
+        if input.starts_with("./") || input.starts_with("../") {
+            return true;
+        }
+
+        // Check for Windows-style absolute paths (C:\, D:\, etc.)
+        if input.len() >= 3
+            && input.chars().nth(1) == Some(':')
+            && (input.chars().nth(2) == Some('\\') || input.chars().nth(2) == Some('/'))
+            && input
+                .chars()
+                .nth(0)
+                .map_or(false, |c| c.is_ascii_alphabetic())
+        {
+            return true;
+        }
+
+        // Check for file paths that don't look like URLs (no protocol)
+        if !input.contains("://") && (input.contains('/') || input.contains('\\')) {
+            // Don't treat domain-like patterns as local files unless they clearly look like paths
+            return !input.starts_with("www.")
+                && !input.contains("://")
+                && (input.starts_with('.') || input.contains('/') || input.contains('\\'));
+        }
+
+        false
     }
 }
 
@@ -419,6 +460,8 @@ pub enum UrlType {
     GoogleDocs,
     /// GitHub issues
     GitHubIssue,
+    /// Local file paths
+    LocalFile,
 }
 
 impl fmt::Display for UrlType {
@@ -427,6 +470,7 @@ impl fmt::Display for UrlType {
             UrlType::Html => write!(f, "HTML"),
             UrlType::GoogleDocs => write!(f, "Google Docs"),
             UrlType::GitHubIssue => write!(f, "GitHub Issue"),
+            UrlType::LocalFile => write!(f, "Local File"),
         }
     }
 }

@@ -60,6 +60,10 @@ impl ConverterRegistry {
             UrlType::GitHubIssue,
             Box::new(super::GitHubConverter::from_env()),
         );
+        registry.register(
+            UrlType::LocalFile,
+            Box::new(super::local::LocalFileConverter::new()),
+        );
 
         registry
     }
@@ -90,6 +94,10 @@ impl ConverterRegistry {
         registry.register(
             UrlType::GitHubIssue,
             Box::new(super::GitHubConverter::from_env()),
+        );
+        registry.register(
+            UrlType::LocalFile,
+            Box::new(super::local::LocalFileConverter::new()),
         );
 
         registry

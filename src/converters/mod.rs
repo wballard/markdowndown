@@ -24,9 +24,13 @@ pub mod google_docs;
 /// GitHub Issues to markdown converter
 pub mod github;
 
+/// Local file to markdown converter
+pub mod local;
+
 // Re-export main converter types for convenience
 pub use config::HtmlConverterConfig;
 pub use converter::{Converter, ConverterRegistry};
 pub use github::GitHubConverter;
 pub use google_docs::GoogleDocsConverter;
 pub use html::HtmlConverter;
+pub use local::LocalFileConverter;

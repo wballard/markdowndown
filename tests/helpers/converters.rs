@@ -34,7 +34,8 @@ pub fn create_html_converter() -> HtmlConverter {
 /// Create an HTML converter with test client
 pub fn create_html_converter_with_client(client: HttpClient) -> HtmlConverter {
     let config = HtmlConverterConfig::default();
-    HtmlConverter::with_config(client, config)
+    let output_config = markdowndown::config::OutputConfig::default();
+    HtmlConverter::with_config(client, config, output_config)
 }
 
 /// Create a basic GitHub converter for testing
@@ -80,7 +81,8 @@ pub fn create_configured_converter_registry() -> ConverterRegistry {
     let http_client = HttpClient::with_config(&config.http, &config.auth);
     let html_config = HtmlConverterConfig::default();
     let placeholder_settings = create_test_placeholder_settings();
-    ConverterRegistry::with_config(http_client, html_config, &placeholder_settings)
+    let output_config = markdowndown::config::OutputConfig::default();
+    ConverterRegistry::with_config(http_client, html_config, &placeholder_settings, &output_config)
 }
 
 /// Get sample URLs for each converter type

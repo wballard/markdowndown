@@ -4,8 +4,10 @@
 //! with full implementations for their respective services.
 
 use crate::client::HttpClient;
+use crate::frontmatter::FrontmatterBuilder;
 use crate::types::{Markdown, MarkdownError};
 use async_trait::async_trait;
+use chrono::Utc;
 
 use super::Converter;
 
@@ -18,6 +20,8 @@ pub struct PlaceholderConfig {
     pub converter_name: &'static str,
     /// Maximum characters to include from content
     pub max_content_length: usize,
+    /// Output configuration including custom frontmatter fields
+    pub output_config: crate::config::OutputConfig,
 }
 
 /// Generic placeholder converter that can be configured for different services.
@@ -71,7 +75,32 @@ impl Converter for PlaceholderConverter {
             self.config.service_name, url, self.config.service_name, truncated_content
         );
 
-        Markdown::new(markdown_content)
+        // Only generate frontmatter if configured to include it
+        if self.config.output_config.include_frontmatter {
+            let now = Utc::now();
+            let mut builder = FrontmatterBuilder::new(url.to_string())
+                .exporter(format!(
+                    "markdowndown-{}-placeholder-{}",
+                    self.config.service_name.to_lowercase().replace(' ', "-"),
+                    env!("CARGO_PKG_VERSION")
+                ))
+                .download_date(now)
+                .additional_field("converted_at".to_string(), now.to_rfc3339())
+                .additional_field("conversion_type".to_string(), "placeholder".to_string())
+                .additional_field("service_name".to_string(), self.config.service_name.clone())
+                .additional_field("url".to_string(), url.to_string());
+
+            // Add custom frontmatter fields from configuration
+            for (key, value) in &self.config.output_config.custom_frontmatter_fields {
+                builder = builder.additional_field(key.clone(), value.clone());
+            }
+
+            let frontmatter = builder.build()?;
+            let markdown_with_frontmatter = format!("{}\n{}", frontmatter, markdown_content);
+            Markdown::new(markdown_with_frontmatter)
+        } else {
+            Markdown::new(markdown_content)
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -104,6 +133,7 @@ impl GoogleDocsConverter {
             service_name: "Google Docs".to_string(),
             converter_name: "Google Docs",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::new(config),
@@ -116,6 +146,7 @@ impl GoogleDocsConverter {
             service_name: "Google Docs".to_string(),
             converter_name: "Google Docs",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),
@@ -131,6 +162,7 @@ impl GoogleDocsConverter {
             service_name: "Google Docs".to_string(),
             converter_name: "Google Docs",
             max_content_length: settings.max_content_length,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),
@@ -156,6 +188,7 @@ impl Office365Converter {
             service_name: "Office 365".to_string(),
             converter_name: "Office 365",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::new(config),
@@ -168,6 +201,7 @@ impl Office365Converter {
             service_name: "Office 365".to_string(),
             converter_name: "Office 365",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),
@@ -183,6 +217,7 @@ impl Office365Converter {
             service_name: "Office 365".to_string(),
             converter_name: "Office 365",
             max_content_length: settings.max_content_length,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),
@@ -208,6 +243,7 @@ impl GitHubIssueConverter {
             service_name: "GitHub Issue".to_string(),
             converter_name: "GitHub Issue",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::new(config),
@@ -220,6 +256,7 @@ impl GitHubIssueConverter {
             service_name: "GitHub Issue".to_string(),
             converter_name: "GitHub Issue",
             max_content_length: 1000,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),
@@ -235,6 +272,7 @@ impl GitHubIssueConverter {
             service_name: "GitHub Issue".to_string(),
             converter_name: "GitHub Issue",
             max_content_length: settings.max_content_length,
+            output_config: crate::config::OutputConfig::default(),
         };
         Self {
             inner: PlaceholderConverter::with_client(client, config),

@@ -528,7 +528,8 @@ mod html_converter_properties {
 
             // Should be able to create converter with this config
             let client = HttpClient::new();
-            let converter = HtmlConverter::with_config(client, config.clone());
+            let output_config = markdowndown::config::OutputConfig::default();
+            let converter = HtmlConverter::with_config(client, config.clone(), output_config);
             prop_assert_eq!(converter.name(), "HTML");
         }
 

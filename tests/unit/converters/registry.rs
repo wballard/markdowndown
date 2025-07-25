@@ -29,8 +29,9 @@ mod helpers {
         let placeholder_settings = PlaceholderSettings {
             max_content_length: 2000,
         };
+        let output_config = markdowndown::config::OutputConfig::default();
 
-        ConverterRegistry::with_config(client, html_config, &placeholder_settings)
+        ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config)
     }
 
     /// Test URL mappings for each converter type
@@ -102,8 +103,9 @@ mod registry_creation_tests {
         let placeholder_settings = PlaceholderSettings {
             max_content_length: 1500,
         };
+        let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings);
+        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config);
         let supported_types = registry.supported_types();
 
         // Should support all URL types with custom configuration
@@ -440,8 +442,9 @@ mod integration_tests {
         let placeholder_settings = PlaceholderSettings {
             max_content_length: 5000,
         };
+        let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings);
+        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config);
 
         // Verify all converters are properly configured
         let supported_types = registry.supported_types();

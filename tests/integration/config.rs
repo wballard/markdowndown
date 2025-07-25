@@ -294,7 +294,7 @@ mod tests {
     fn test_validation_helpers() {
         // Test markdown quality validation
         assert!(TestUtils::validate_markdown_quality(
-            "# Title\n\nThis is a substantial piece of content that should pass validation."
+            "# Title\n\nThis is a substantial piece of content that should pass validation.\n\nIt has multiple lines and good content."
         ));
         assert!(!TestUtils::validate_markdown_quality(""));
         assert!(!TestUtils::validate_markdown_quality("Short"));

@@ -73,6 +73,7 @@ impl ConverterRegistry {
         http_client: crate::client::HttpClient,
         html_config: super::config::HtmlConverterConfig,
         placeholder_settings: &crate::config::PlaceholderSettings,
+        output_config: &crate::config::OutputConfig,
     ) -> Self {
         let mut registry = Self {
             converters: std::collections::HashMap::new(),
@@ -84,6 +85,7 @@ impl ConverterRegistry {
             Box::new(super::HtmlConverter::with_config(
                 http_client.clone(),
                 html_config,
+                output_config.clone(),
             )),
         );
         registry.register(

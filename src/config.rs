@@ -102,6 +102,17 @@ pub struct OutputConfig {
     pub max_consecutive_blank_lines: usize,
 }
 
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            include_frontmatter: true,
+            custom_frontmatter_fields: Vec::new(),
+            normalize_whitespace: true,
+            max_consecutive_blank_lines: 2,
+        }
+    }
+}
+
 /// Builder for creating Config instances with a fluent interface.
 #[derive(Debug, Clone)]
 pub struct ConfigBuilder {

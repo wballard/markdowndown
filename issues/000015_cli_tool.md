@@ -332,3 +332,56 @@ cargo build --target x86_64-unknown-linux-gnu
 - Plugin system for custom converters
 - GUI wrapper for desktop use
 - Docker image for containerized usage
+
+
+## Proposed Solution
+
+Based on my analysis of the codebase, I'll implement a comprehensive CLI tool following this approach:
+
+### Implementation Strategy
+
+1. **Dependencies & Configuration**
+   - Add `clap` v4 with derive features for modern CLI parsing
+   - Add required tokio features for async runtime
+   - Add TOML support for configuration files
+   - Add `indicatif` for progress bars in batch operations
+
+2. **CLI Architecture**
+   - Use `clap`'s derive API for clean, maintainable argument parsing
+   - Follow the subcommand pattern: `markdowndown <URL>` or `markdowndown <subcommand>`
+   - Implement proper async/await throughout using tokio
+   - Use existing library API (`MarkdownDown::new()` and `convert_url()`)
+
+3. **Core Commands Implementation**
+   - Single URL conversion as default command when URL provided directly
+   - `batch` subcommand for processing multiple URLs from file
+   - `detect` subcommand to show detected URL type without conversion
+   - `list-types` subcommand to show supported URL types
+
+4. **Output & Configuration**
+   - Multiple output formats: markdown (default), JSON, YAML
+   - File output with `--output` flag, stdout by default  
+   - Configuration file support with TOML format
+   - Environment variable overrides for tokens
+   - Frontmatter control options
+
+5. **Error Handling & UX**
+   - Map library errors to appropriate exit codes (1-99)
+   - User-friendly error messages with suggestions
+   - Progress reporting for batch operations
+   - Verbose and quiet modes for different use cases
+
+6. **Testing Strategy**  
+   - Unit tests for CLI argument parsing
+   - Integration tests using temporary files
+   - End-to-end tests with actual URL conversion
+   - Cross-platform compatibility verification
+
+### Key Benefits
+- Leverages existing robust library implementation
+- Follows Rust CLI best practices with clap v4
+- Provides comprehensive error handling and user guidance
+- Supports both interactive and batch processing workflows
+- Extensible design for future enhancements
+
+I'll implement this using Test Driven Development, starting with the most critical functionality and building up to the complete feature set outlined in the issue requirements.

@@ -13,6 +13,10 @@ categories = ["text-processing", "web-programming"]
 name = "markdowndown"
 crate-type = ["lib"]
 
+[[bin]]
+name = "markdowndown"
+path = "src/bin/markdowndown.rs"
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -29,6 +33,11 @@ async-trait = "0.1"
 regex = "1.0"
 tempfile = "3.10"
 tracing = "0.1"
+# CLI dependencies
+clap = { version = "4.4", features = ["derive", "env"] }
+indicatif = "0.17"
+toml = "0.8"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

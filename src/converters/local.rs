@@ -231,7 +231,7 @@ mod tests {
         // Create a temporary file with markdown content
         let mut temp_file = NamedTempFile::new().unwrap();
         let content = "# Test Document\n\nThis is a test markdown file.";
-        writeln!(temp_file, "{}", content).unwrap();
+        writeln!(temp_file, "{content}").unwrap();
 
         let file_path = temp_file.path().to_str().unwrap();
         let result = converter.convert(file_path).await;
@@ -249,10 +249,10 @@ mod tests {
         // Create a temporary file with markdown content
         let mut temp_file = NamedTempFile::new().unwrap();
         let content = "# File URL Test\n\nTesting file:// URLs.";
-        writeln!(temp_file, "{}", content).unwrap();
+        writeln!(temp_file, "{content}").unwrap();
 
         let file_path = temp_file.path().to_str().unwrap();
-        let file_url = format!("file://{}", file_path);
+        let file_url = format!("file://{file_path}");
         let result = converter.convert(&file_url).await;
 
         assert!(result.is_ok());
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_default_implementation() {
-        let converter = LocalFileConverter::default();
+        let converter = LocalFileConverter;
         assert_eq!(converter.name(), "Local File Converter");
     }
 }

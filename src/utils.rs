@@ -52,15 +52,24 @@ pub fn is_local_file_path(input: &str) -> bool {
         if trimmed.starts_with("//") {
             return false;
         }
-        
+
         // Don't treat URLs with known schemes as local files (excluding file: which we handled above)
-        let known_schemes = ["data:", "javascript:", "mailto:", "ftp:", "tel:", "sms:", "http:", "https:"];
+        let known_schemes = [
+            "data:",
+            "javascript:",
+            "mailto:",
+            "ftp:",
+            "tel:",
+            "sms:",
+            "http:",
+            "https:",
+        ];
         for scheme in &known_schemes {
             if trimmed.starts_with(scheme) {
                 return false;
             }
         }
-        
+
         // Don't treat domain-like patterns as local files unless they clearly look like paths
         return !trimmed.starts_with("www.")
             && !trimmed.contains("://")
@@ -70,34 +79,45 @@ pub fn is_local_file_path(input: &str) -> bool {
     // Check for simple relative filenames (no path separators but look like files)
     if !trimmed.contains("://") && !trimmed.contains("www.") && !trimmed.starts_with("//") {
         // Don't treat URLs with known schemes as local files
-        let known_schemes = ["data:", "javascript:", "mailto:", "ftp:", "tel:", "sms:", "http:", "https:"];
+        let known_schemes = [
+            "data:",
+            "javascript:",
+            "mailto:",
+            "ftp:",
+            "tel:",
+            "sms:",
+            "http:",
+            "https:",
+        ];
         for scheme in &known_schemes {
             if trimmed.starts_with(scheme) {
                 return false;
             }
         }
-        
+
         // Check if it looks like a filename with a clear file extension
         if trimmed.contains('.') && !trimmed.contains(' ') {
             // Don't treat common domain patterns as files
             let common_tlds = ["com", "org", "net", "edu", "gov", "mil", "int", "io", "co"];
             let parts: Vec<&str> = trimmed.split('.').collect();
-            
+
             // If it's a simple two-part name ending in a common TLD, it's probably a domain
             if parts.len() == 2 && common_tlds.contains(&parts[1]) {
                 return false;
             }
-            
+
             // If it has a clear file extension (common file extensions), treat as file
-            let file_extensions = ["md", "txt", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf",
-                                 "py", "rs", "js", "ts", "html", "css", "java", "cpp", "c", "h",
-                                 "pdf", "doc", "docx", "png", "jpg", "jpeg", "gif", "svg"];
+            let file_extensions = [
+                "md", "txt", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "py",
+                "rs", "js", "ts", "html", "css", "java", "cpp", "c", "h", "pdf", "doc", "docx",
+                "png", "jpg", "jpeg", "gif", "svg",
+            ];
             if let Some(extension) = parts.last() {
                 if file_extensions.contains(extension) {
                     return true;
                 }
             }
-            
+
             // Additional checks to avoid false positives for domain names
             // Must not contain multiple dots in a row and should have reasonable structure
             if !trimmed.contains("..") && trimmed.matches('.').count() <= 2 {
@@ -109,11 +129,20 @@ pub fn is_local_file_path(input: &str) -> bool {
                 }
             }
         }
-        
+
         // Accept well-known files without extensions (common in Unix-like systems)
-        if !trimmed.contains('.') && !trimmed.contains(' ') && trimmed.len() > 0 {
-            let known_files = ["Makefile", "README", "LICENSE", "CHANGELOG", "CONTRIBUTING", 
-                              "Dockerfile", "Vagrantfile", "Cargo", "package"];
+        if !trimmed.contains('.') && !trimmed.contains(' ') && !trimmed.is_empty() {
+            let known_files = [
+                "Makefile",
+                "README",
+                "LICENSE",
+                "CHANGELOG",
+                "CONTRIBUTING",
+                "Dockerfile",
+                "Vagrantfile",
+                "Cargo",
+                "package",
+            ];
             if known_files.contains(&trimmed) {
                 return true;
             }
@@ -183,7 +212,7 @@ mod tests {
         assert!(is_local_file_path("README.md"));
         assert!(is_local_file_path("config.json"));
         assert!(is_local_file_path("script.py"));
-        
+
         // Should recognize well-known files without extensions
         assert!(is_local_file_path("Makefile"));
         assert!(is_local_file_path("README"));
@@ -199,7 +228,7 @@ mod tests {
         assert!(!is_local_file_path("docs.google.com"));
         assert!(!is_local_file_path("site.org"));
         assert!(!is_local_file_path("university.edu"));
-        
+
         // Should still recognize legitimate files with common TLD-like extensions
         assert!(is_local_file_path("archive.com.txt")); // .txt extension makes it clear it's a file
         assert!(is_local_file_path("backup.org.json")); // .json extension makes it clear it's a file
@@ -209,7 +238,7 @@ mod tests {
     fn test_edge_cases() {
         assert!(!is_local_file_path(""));
         assert!(!is_local_file_path("   "));
-        
+
         // Simple words without extensions that look like domains should be rejected
         assert!(!is_local_file_path("simple"));
         assert!(!is_local_file_path("word"));

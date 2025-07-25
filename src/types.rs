@@ -1185,11 +1185,11 @@ mod tests {
                 "https://sub.domain.com/path?query=value#fragment",
                 "http://user:pass@example.com",
                 "https://example.com:443/very/long/path/with/many/segments",
-                "file:///absolute/path/to/file.md",  // Local file URL (absolute)
-                "file://./relative/path.md",         // Local file URL (relative)
-                "/absolute/path/to/file.md",         // Local file path (absolute)
-                "./relative/file.md",                // Local file path (relative)
-                "document.md",                       // Simple filename
+                "file:///absolute/path/to/file.md", // Local file URL (absolute)
+                "file://./relative/path.md",        // Local file URL (relative)
+                "/absolute/path/to/file.md",        // Local file path (absolute)
+                "./relative/file.md",               // Local file path (relative)
+                "document.md",                      // Simple filename
             ];
 
             for url_case in valid_url_cases {

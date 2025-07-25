@@ -43,6 +43,7 @@
 use crate::client::HttpClient;
 use crate::frontmatter::FrontmatterBuilder;
 use crate::types::{Markdown, MarkdownError};
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -689,6 +690,17 @@ impl GitHubConverter {
 impl Default for GitHubConverter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[async_trait]
+impl super::Converter for GitHubConverter {
+    async fn convert(&self, url: &str) -> Result<Markdown, MarkdownError> {
+        self.convert(url).await
+    }
+
+    fn name(&self) -> &'static str {
+        "GitHub Issue"
     }
 }
 

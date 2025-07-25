@@ -262,7 +262,7 @@ fn init_logging(cli: &Cli) {
     };
 
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(format!("markdowndown={}", level)));
+        .unwrap_or_else(|_| EnvFilter::new(format!("markdowndown={level}")));
 
     tracing_subscriber::registry()
         .with(filter)
@@ -425,7 +425,7 @@ async fn single_convert(
     let result = markdowndown.convert_url(url).await?;
 
     // Format output based on CLI options
-    let output = format_output(&result, &cli)?;
+    let output = format_output(&result, cli)?;
 
     // Write output to file or stdout
     write_output(&output, cli.output.as_deref())?;
@@ -466,7 +466,7 @@ async fn batch_convert(
     }
 
     if urls.is_empty() {
-        eprintln!("No valid URLs found in file: {}", file);
+        eprintln!("No valid URLs found in file: {file}");
         return Ok(());
     }
 
@@ -513,17 +513,39 @@ async fn batch_convert(
         let semaphore = semaphore.clone();
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    if let Some(ref pb) = pb {
+                        pb.println(format!("❌ {url}: Failed to acquire semaphore"));
+                    } else {
+                        eprintln!("❌ {url}: Failed to acquire semaphore");
+                    }
+                    error_count.fetch_add(1, Ordering::Relaxed);
+                    if let Some(ref pb) = pb {
+                        pb.inc(1);
+                    }
+                    return;
+                }
+            };
 
             // Create a new MarkdownDown instance for this task
             let markdowndown = MarkdownDown::with_config(config);
 
             if let Some(ref pb) = pb {
-                pb.set_message(format!("Converting: {}", url));
+                pb.set_message(format!("Converting: {url}"));
             }
 
-            match convert_single_url(&markdowndown, &url, cli_format, include_frontmatter).await {
-                Ok(content) => {
+            // Add timeout wrapper to prevent hanging
+            let conversion_timeout = std::time::Duration::from_secs(60); // 60 second safety timeout
+            let conversion_result = tokio::time::timeout(
+                conversion_timeout,
+                convert_single_url(&markdowndown, &url, cli_format, include_frontmatter),
+            )
+            .await;
+
+            match conversion_result {
+                Ok(Ok(content)) => {
                     // Save to file if output directory specified
                     if let Some(ref dir) = output_dir {
                         let filename = format!("{:03}.md", index + 1);
@@ -545,17 +567,27 @@ async fn batch_convert(
                         }
                     } else {
                         // Output to stdout with separator
-                        println!("=== {} ===", url);
-                        println!("{}", content);
+                        println!("=== {url} ===");
+                        println!("{content}");
                         println!();
                         success_count.fetch_add(1, Ordering::Relaxed);
                     }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     if let Some(ref pb) = pb {
-                        pb.println(format!("❌ {}: {}", url, e));
+                        pb.println(format!("❌ {url}: {e}"));
                     } else {
-                        eprintln!("❌ {}: {}", url, e);
+                        eprintln!("❌ {url}: {e}");
+                    }
+                    error_count.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(_timeout) => {
+                    let timeout_msg =
+                        format!("Conversion timeout after {}s", conversion_timeout.as_secs());
+                    if let Some(ref pb) = pb {
+                        pb.println(format!("❌ {url}: {timeout_msg}"));
+                    } else {
+                        eprintln!("❌ {url}: {timeout_msg}");
                     }
                     error_count.fetch_add(1, Ordering::Relaxed);
                 }
@@ -585,8 +617,8 @@ async fn batch_convert(
     if stats || cli.verbose {
         println!();
         println!("Conversion Statistics:");
-        println!("  Successful: {}", successes);
-        println!("  Failed: {}", errors);
+        println!("  Successful: {successes}");
+        println!("  Failed: {errors}");
         println!("  Total: {}", successes + errors);
         println!(
             "  Success rate: {:.1}%",
@@ -630,7 +662,7 @@ async fn convert_single_url(
 /// Detect and display URL type
 fn detect_url_type(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url_type = markdowndown::detect_url_type(url)?;
-    println!("{}", url_type);
+    println!("{url_type}");
     Ok(())
 }
 
@@ -639,7 +671,7 @@ fn list_supported_types(markdowndown: &MarkdownDown) -> Result<(), Box<dyn std::
     let types = markdowndown.supported_types();
     println!("Supported URL types:");
     for url_type in types {
-        println!("  {}", url_type);
+        println!("  {url_type}");
     }
     Ok(())
 }
@@ -650,8 +682,10 @@ fn format_output(
     cli: &Cli,
 ) -> Result<String, Box<dyn std::error::Error>> {
     if cli.frontmatter_only {
-        // TODO: Extract and return only frontmatter
-        return Ok("Frontmatter-only output not yet implemented".to_string());
+        return match markdown.frontmatter() {
+            Some(frontmatter) => Ok(frontmatter),
+            None => Ok("No frontmatter found in the document".to_string()),
+        };
     }
 
     match cli.format {
@@ -681,7 +715,7 @@ fn write_output(
             debug!("Output written to: {}", file_path);
         }
         None => {
-            print!("{}", content);
+            print!("{content}");
         }
     }
     Ok(())
@@ -707,7 +741,7 @@ fn handle_error(error: Box<dyn std::error::Error>) -> ! {
         eprintln!("💡 Check your API tokens and permissions");
         process::exit(3);
     } else {
-        eprintln!("❌ Unexpected error: {}", error);
+        eprintln!("❌ Unexpected error: {error}");
         process::exit(99);
     }
 }

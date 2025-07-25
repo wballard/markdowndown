@@ -151,15 +151,6 @@ let config = Config::builder()
 - **Private repos**: `repo`
 - **Organizations**: May need `read:org`
 
-### Office 365 Token
-
-For Office 365 document access (future feature):
-
-```rust
-let config = Config::builder()
-    .office365_token("your_office365_token")
-    .build();
-```
 
 ### Google API Key
 
@@ -256,7 +247,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Authentication
         .github_token(std::env::var("GITHUB_TOKEN").ok())
-        .office365_token(std::env::var("OFFICE365_TOKEN").ok())
         
         // Output formatting
         .include_frontmatter(true)
@@ -381,12 +371,6 @@ async fn convert_with_appropriate_config(url: &str) -> Result<String, Box<dyn st
             Config::builder()
                 .timeout_seconds(120)  // Google Docs can be slow
                 .max_retries(2)
-                .build()
-        }
-        UrlType::Office365 => {
-            Config::builder()
-                .office365_token(std::env::var("OFFICE365_TOKEN").ok())
-                .timeout_seconds(180)  // Office docs can be very slow
                 .build()
         }
         UrlType::Html => {

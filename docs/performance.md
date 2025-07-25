@@ -22,7 +22,6 @@ Based on typical hardware (modern laptop with good internet connection):
 | **HTML** | 0.5-2s | 1-5s | 3-15s | 10-60s |
 | **Google Docs** | 1-3s | 2-8s | 5-30s | 15-120s |
 | **GitHub Issues** | 0.5-2s | 1-4s | 2-10s | 5-30s |
-| **Office 365** | 2-8s | 5-20s | 15-90s | 30-300s |
 
 ### Memory Usage
 
@@ -768,13 +767,6 @@ async fn optimized_convert(url: &str) -> Result<String, Box<dyn std::error::Erro
                 .github_token(std::env::var("GITHUB_TOKEN").ok())
                 .build()
         }
-        UrlType::Office365 => {
-            // Office 365 - often slow and unreliable
-            Config::builder()
-                .timeout_seconds(180)
-                .max_retries(1)  // Don't retry slow docs
-                .build()
-        }
     };
     
     let md = MarkdownDown::with_config(config);
@@ -862,7 +854,6 @@ async fn optimized_batch_convert(urls: Vec<String>) -> HashMap<String, Result<St
 - **HTML pages**: 20-30 seconds
 - **Google Docs**: 60-120 seconds  
 - **GitHub Issues**: 30-45 seconds
-- **Office 365**: 120-300 seconds
 
 ### 2. Control Concurrency
 - **Local processing**: 5-10 concurrent requests

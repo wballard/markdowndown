@@ -67,7 +67,6 @@ fn test_list_types_command() {
     assert!(stdout.contains("HTML"));
     assert!(stdout.contains("GitHub Issue"));
     assert!(stdout.contains("Google Docs"));
-    assert!(stdout.contains("Office 365"));
 }
 
 /// Test configuration file loading

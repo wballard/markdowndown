@@ -2,10 +2,8 @@
 
 use markdowndown::client::HttpClient;
 use markdowndown::config::Config;
-use markdowndown::config::PlaceholderSettings;
 use markdowndown::converters::{
-    ConverterRegistry, GitHubIssueConverter, GoogleDocsConverter, HtmlConverter,
-    HtmlConverterConfig, Office365Converter,
+    ConverterRegistry, GoogleDocsConverter, HtmlConverter, HtmlConverterConfig,
 };
 use markdowndown::types::UrlType;
 use std::time::Duration;
@@ -17,13 +15,6 @@ pub fn create_test_http_client() -> HttpClient {
         .timeout(Duration::from_secs(2))
         .build();
     HttpClient::with_config(&config.http, &config.auth)
-}
-
-/// Create test PlaceholderSettings for converter testing
-pub fn create_test_placeholder_settings() -> PlaceholderSettings {
-    PlaceholderSettings {
-        max_content_length: 1000,
-    }
 }
 
 /// Create a basic HTML converter for testing
@@ -38,36 +29,9 @@ pub fn create_html_converter_with_client(client: HttpClient) -> HtmlConverter {
     HtmlConverter::with_config(client, config, output_config)
 }
 
-/// Create a basic GitHub converter for testing
-pub fn create_github_converter() -> GitHubIssueConverter {
-    GitHubIssueConverter::new()
-}
-
-/// Create a GitHub converter with configuration
-pub fn create_github_converter_with_config(
-    client: HttpClient,
-    settings: &PlaceholderSettings,
-) -> GitHubIssueConverter {
-    GitHubIssueConverter::with_client_and_settings(client, settings)
-}
-
 /// Create a basic Google Docs converter for testing
 pub fn create_google_docs_converter() -> GoogleDocsConverter {
     GoogleDocsConverter::new()
-}
-
-/// Create a basic Office365 converter for testing  
-pub fn create_office365_converter() -> Office365Converter {
-    Office365Converter::new()
-}
-
-/// Create an Office365 converter with configuration
-pub fn create_office365_converter_with_config(
-    _client: HttpClient,
-    _settings: &PlaceholderSettings,
-) -> Office365Converter {
-    use markdowndown::converters::Office365Config;
-    Office365Converter::with_config(Office365Config::default())
 }
 
 /// Create a basic converter registry for testing
@@ -80,14 +44,8 @@ pub fn create_configured_converter_registry() -> ConverterRegistry {
     let config = Config::builder().timeout_seconds(10).max_retries(2).build();
     let http_client = HttpClient::with_config(&config.http, &config.auth);
     let html_config = HtmlConverterConfig::default();
-    let placeholder_settings = create_test_placeholder_settings();
     let output_config = markdowndown::config::OutputConfig::default();
-    ConverterRegistry::with_config(
-        http_client,
-        html_config,
-        &placeholder_settings,
-        &output_config,
-    )
+    ConverterRegistry::with_config(http_client, html_config, &output_config)
 }
 
 /// Get sample URLs for each converter type
@@ -107,14 +65,6 @@ pub fn sample_urls_by_converter() -> Vec<(UrlType, Vec<&'static str>)> {
                 "https://docs.google.com/document/d/abc123/edit",
                 "https://docs.google.com/document/d/xyz789",
                 "https://docs.google.com/document/d/test123/edit#heading=h.abc",
-            ],
-        ),
-        (
-            UrlType::Office365,
-            vec![
-                "https://company.sharepoint.com/sites/team/Document.docx",
-                "https://tenant.sharepoint.com/personal/user/Documents/file.xlsx",
-                "https://company-my.sharepoint.com/personal/user_company_com/Documents/presentation.pptx",
             ],
         ),
         (
@@ -207,30 +157,6 @@ pub const SAMPLE_GOOGLE_DOCS_HTML: &str = r#"<!DOCTYPE html>
 </body>
 </html>"#;
 
-/// Sample Office365 HTML content
-pub const SAMPLE_OFFICE365_HTML: &str = r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Document - SharePoint</title>
-</head>
-<body>
-    <div class="office-content">
-        <h1>Project Proposal</h1>
-        <p>This is a sample Office365 document for testing.</p>
-        
-        <h2>Overview</h2>
-        <p>The project aims to improve efficiency and reduce costs.</p>
-        
-        <h2>Requirements</h2>
-        <ul>
-            <li>Technical requirements</li>
-            <li>Resource requirements</li>
-            <li>Timeline requirements</li>
-        </ul>
-    </div>
-</body>
-</html>"#;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,20 +164,15 @@ mod tests {
     #[test]
     fn test_create_converters() {
         let _html = create_html_converter();
-        let _github = create_github_converter();
         let _google = create_google_docs_converter();
-        let _office = create_office365_converter();
         let _registry = create_converter_registry();
     }
 
     #[test]
     fn test_create_with_config() {
         let client = create_test_http_client();
-        let settings = create_test_placeholder_settings();
 
         let _html = create_html_converter_with_client(client.clone());
-        let _github = create_github_converter_with_config(client.clone(), &settings);
-        let _office = create_office365_converter_with_config(client, &settings);
         let _registry = create_configured_converter_registry();
     }
 
@@ -260,13 +181,12 @@ mod tests {
         assert!(SAMPLE_HTML_CONTENT.len() > 100);
         assert!(SAMPLE_GITHUB_ISSUE_HTML.len() > 100);
         assert!(SAMPLE_GOOGLE_DOCS_HTML.len() > 100);
-        assert!(SAMPLE_OFFICE365_HTML.len() > 100);
     }
 
     #[test]
     fn test_sample_urls() {
         let urls = sample_urls_by_converter();
-        assert_eq!(urls.len(), 4);
+        assert_eq!(urls.len(), 3);
 
         for (url_type, url_list) in urls {
             assert!(

@@ -21,14 +21,8 @@ pub mod html;
 /// Google Docs to markdown converter
 pub mod google_docs;
 
-/// Office 365 to markdown converter
-pub mod office365;
-
 /// GitHub Issues to markdown converter
 pub mod github;
-
-/// Placeholder converters for services not yet fully implemented
-pub mod placeholder;
 
 // Re-export main converter types for convenience
 pub use config::HtmlConverterConfig;
@@ -36,5 +30,3 @@ pub use converter::{Converter, ConverterRegistry};
 pub use github::GitHubConverter;
 pub use google_docs::GoogleDocsConverter;
 pub use html::HtmlConverter;
-pub use office365::{Office365Config, Office365Converter};
-pub use placeholder::GitHubIssueConverter;

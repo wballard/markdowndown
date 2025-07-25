@@ -30,10 +30,6 @@ async fn test_end_to_end_workflow() -> Result<(), Box<dyn std::error::Error>> {
         config_builder = config_builder.google_api_key(api_key);
     }
 
-    if let Some(creds) = &config.office365_credentials {
-        config_builder = config_builder.office365_token(&creds.username);
-    }
-
     let md_config = config_builder.build();
     let md = MarkdownDown::with_config(md_config);
 

@@ -417,8 +417,6 @@ pub enum UrlType {
     Html,
     /// Google Docs documents
     GoogleDocs,
-    /// Office 365 documents
-    Office365,
     /// GitHub issues
     GitHubIssue,
 }
@@ -428,7 +426,6 @@ impl fmt::Display for UrlType {
         match self {
             UrlType::Html => write!(f, "HTML"),
             UrlType::GoogleDocs => write!(f, "Google Docs"),
-            UrlType::Office365 => write!(f, "Office 365"),
             UrlType::GitHubIssue => write!(f, "GitHub Issue"),
         }
     }
@@ -950,7 +947,6 @@ mod tests {
     fn test_urltype_display() {
         assert_eq!(format!("{}", UrlType::Html), "HTML");
         assert_eq!(format!("{}", UrlType::GoogleDocs), "Google Docs");
-        assert_eq!(format!("{}", UrlType::Office365), "Office 365");
         assert_eq!(format!("{}", UrlType::GitHubIssue), "GitHub Issue");
     }
 

@@ -18,19 +18,12 @@ pub struct IntegrationTestConfig {
 
     // Authentication
     pub github_token: Option<String>,
-    pub office365_credentials: Option<Office365Credentials>,
     pub google_api_key: Option<String>,
 
     // Test control
     pub skip_slow_tests: bool,
     pub skip_external_services: bool,
     pub skip_network_tests: bool,
-}
-
-/// Office 365 authentication credentials
-#[derive(Debug, Clone)]
-pub struct Office365Credentials {
-    pub username: String,
 }
 
 impl IntegrationTestConfig {
@@ -54,7 +47,6 @@ impl IntegrationTestConfig {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(120),
             github_token: env::var("GITHUB_TOKEN").ok(),
-            office365_credentials: Self::parse_office365_credentials(),
             google_api_key: env::var("GOOGLE_API_KEY").ok(),
             skip_slow_tests: env::var("SKIP_SLOW_TESTS")
                 .map(|s| s.to_lowercase() == "true" || s == "1")
@@ -76,7 +68,6 @@ impl IntegrationTestConfig {
             default_timeout_secs: 30,
             large_document_timeout_secs: 120,
             github_token: env::var("GITHUB_TOKEN").ok(),
-            office365_credentials: None, // Usually not available locally
             google_api_key: env::var("GOOGLE_API_KEY").ok(),
             skip_slow_tests: false,
             skip_external_services: false,
@@ -92,7 +83,6 @@ impl IntegrationTestConfig {
             default_timeout_secs: 60,
             large_document_timeout_secs: 180,
             github_token: env::var("GITHUB_TOKEN").ok(),
-            office365_credentials: Self::parse_office365_credentials(),
             google_api_key: env::var("GOOGLE_API_KEY").ok(),
             skip_slow_tests: env::var("SKIP_SLOW_TESTS")
                 .map(|s| s.to_lowercase() == "true" || s == "1")
@@ -124,11 +114,6 @@ impl IntegrationTestConfig {
         !self.skip_external_services && self.github_token.is_some()
     }
 
-    /// Check if Office 365 tests can be run (credentials available)
-    pub fn can_test_office365(&self) -> bool {
-        !self.skip_external_services && self.office365_credentials.is_some()
-    }
-
     /// Check if Google Docs tests can be run
     pub fn can_test_google_docs(&self) -> bool {
         !self.skip_external_services
@@ -137,12 +122,6 @@ impl IntegrationTestConfig {
     /// Check if HTML tests can be run
     pub fn can_test_html(&self) -> bool {
         !self.skip_external_services && !self.skip_network_tests
-    }
-
-    /// Parse Office 365 credentials from environment variables
-    fn parse_office365_credentials() -> Option<Office365Credentials> {
-        let username = env::var("OFFICE365_USERNAME").ok()?;
-        Some(Office365Credentials { username })
     }
 }
 
@@ -282,10 +261,6 @@ mod tests {
 
         // These depend on environment variables, so we just test the logic
         assert_eq!(config.can_test_github(), config.github_token.is_some());
-        assert_eq!(
-            config.can_test_office365(),
-            config.office365_credentials.is_some()
-        );
         assert!(config.can_test_google_docs()); // Should be true for local testing
         assert!(config.can_test_html()); // Should be true for local testing
     }

@@ -117,14 +117,6 @@ pub fn test_urls_by_type() -> Vec<(UrlType, Vec<&'static str>)> {
             ],
         ),
         (
-            UrlType::Office365,
-            vec![
-                "https://company.sharepoint.com/sites/team/Document.docx",
-                "https://tenant.sharepoint.com/personal/user/Documents/file.xlsx",
-                "https://company-my.sharepoint.com/personal/user_company_com/Documents/presentation.pptx",
-            ],
-        ),
-        (
             UrlType::GitHubIssue,
             vec![
                 "https://github.com/owner/repo/issues/123",

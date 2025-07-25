@@ -316,25 +316,49 @@ impl UrlDetector {
 
     /// Checks if a URL matches a GitHub issue or pull request pattern.
     fn is_github_issue_url(&self, parsed_url: &ParsedUrl) -> bool {
-        if parsed_url.host_str() != Some("github.com") {
+        let host = parsed_url.host_str();
+        if host != Some("github.com") && host != Some("api.github.com") {
             return false;
         }
 
         let path = parsed_url.path();
         let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-        // GitHub issue/PR URLs have the pattern: /{owner}/{repo}/issues/{number} or /{owner}/{repo}/pull/{number}
-        // Need exactly 4 or more segments: owner, repo, "issues"/"pull", number
-        if path_segments.len() >= 4 {
-            if let (Some(resource_segment), Some(number_segment)) =
-                (path_segments.get(2), path_segments.get(3))
-            {
-                if (*resource_segment == "issues" || *resource_segment == "pull")
-                    && number_segment.parse::<u32>().is_ok()
-                {
-                    return true;
+        match host {
+            Some("github.com") => {
+                // GitHub issue/PR URLs have the pattern: /{owner}/{repo}/issues/{number} or /{owner}/{repo}/pull/{number}
+                // Need exactly 4 or more segments: owner, repo, "issues"/"pull", number
+                if path_segments.len() >= 4 {
+                    if let (Some(resource_segment), Some(number_segment)) =
+                        (path_segments.get(2), path_segments.get(3))
+                    {
+                        if (*resource_segment == "issues" || *resource_segment == "pull")
+                            && number_segment.parse::<u32>().is_ok()
+                        {
+                            return true;
+                        }
+                    }
                 }
             }
+            Some("api.github.com") => {
+                // GitHub API URLs have the pattern: /repos/{owner}/{repo}/issues/{number} or /repos/{owner}/{repo}/pulls/{number}
+                // Need exactly 5 or more segments: "repos", owner, repo, "issues"/"pulls", number
+                if path_segments.len() >= 5 {
+                    if let (Some(repos_segment), Some(resource_segment), Some(number_segment)) = (
+                        path_segments.first(),
+                        path_segments.get(3),
+                        path_segments.get(4),
+                    ) {
+                        if *repos_segment == "repos"
+                            && (*resource_segment == "issues" || *resource_segment == "pulls")
+                            && number_segment.parse::<u32>().is_ok()
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
 
         false

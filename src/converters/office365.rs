@@ -354,12 +354,19 @@ impl Office365Converter {
             .await?;
 
         // Step 5: Generate frontmatter
+        let now = Utc::now();
+        let title = self.extract_title_from_filename(&document.document_path);
         let frontmatter = FrontmatterBuilder::new(url.to_string())
             .exporter(format!(
                 "markdowndown-office365-{}",
                 env!("CARGO_PKG_VERSION")
             ))
-            .download_date(Utc::now())
+            .download_date(now)
+            .additional_field("title".to_string(), title)
+            .additional_field("url".to_string(), url.to_string())
+            .additional_field("converter".to_string(), "Office365Converter".to_string())
+            .additional_field("converted_at".to_string(), now.to_rfc3339())
+            .additional_field("conversion_type".to_string(), "office365".to_string())
             .additional_field(
                 "document_type".to_string(),
                 self.document_type_string(&document.document_type),
@@ -807,6 +814,23 @@ impl Office365Converter {
             Office365Service::OneDriveBusiness => "onedrive_business".to_string(),
             Office365Service::OneDrivePersonal => "onedrive_personal".to_string(),
             Office365Service::OfficeOnline => "office_online".to_string(),
+        }
+    }
+
+    /// Extracts a title from the filename by removing extension and URL decoding.
+    fn extract_title_from_filename(&self, filename: &str) -> String {
+        // URL decode the filename - simple replacement of common encoded characters
+        let decoded = filename
+            .replace("%20", " ")
+            .replace("%28", "(")
+            .replace("%29", ")")
+            .replace("%2C", ",");
+
+        // Remove file extension
+        if let Some(stem) = std::path::Path::new(&decoded).file_stem() {
+            stem.to_string_lossy().to_string()
+        } else {
+            decoded
         }
     }
 }

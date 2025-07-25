@@ -5,8 +5,10 @@
 //! to clean up the markdown output.
 
 use crate::client::HttpClient;
+use crate::frontmatter::FrontmatterBuilder;
 use crate::types::{Markdown, MarkdownError};
 use async_trait::async_trait;
+use chrono::Utc;
 use html2text::from_read;
 use std::io::Cursor;
 
@@ -19,6 +21,7 @@ use super::preprocessor::HtmlPreprocessor;
 #[derive(Debug, Clone)]
 pub struct HtmlConverter {
     config: HtmlConverterConfig,
+    output_config: crate::config::OutputConfig,
     client: HttpClient,
 }
 
@@ -40,6 +43,7 @@ impl HtmlConverter {
     pub fn new() -> Self {
         Self {
             config: HtmlConverterConfig::default(),
+            output_config: crate::config::OutputConfig::default(),
             client: HttpClient::new(),
         }
     }
@@ -50,12 +54,21 @@ impl HtmlConverter {
     ///
     /// * `client` - Configured HTTP client to use for requests
     /// * `config` - Custom configuration options for the converter
+    /// * `output_config` - Output configuration including custom frontmatter fields
     ///
     /// # Returns
     ///
     /// A new `HtmlConverter` instance with the specified configuration.
-    pub fn with_config(client: HttpClient, config: HtmlConverterConfig) -> Self {
-        Self { config, client }
+    pub fn with_config(
+        client: HttpClient,
+        config: HtmlConverterConfig,
+        output_config: crate::config::OutputConfig,
+    ) -> Self {
+        Self {
+            config,
+            output_config,
+            client,
+        }
     }
 
     /// Creates a new HTML converter with custom configuration.
@@ -70,6 +83,7 @@ impl HtmlConverter {
     pub fn with_config_only(config: HtmlConverterConfig) -> Self {
         Self {
             config,
+            output_config: crate::config::OutputConfig::default(),
             client: HttpClient::new(),
         }
     }
@@ -147,6 +161,18 @@ impl HtmlConverter {
         let markdown = from_read(cursor, self.config.max_line_width);
         Ok(markdown)
     }
+
+    /// Extracts the title from HTML content.
+    fn extract_title(&self, html: &str) -> Option<String> {
+        // Simple regex to extract title from HTML
+        if let Some(start) = html.find("<title>") {
+            if let Some(end) = html[start + 7..].find("</title>") {
+                let title = &html[start + 7..start + 7 + end];
+                return Some(title.trim().to_string());
+            }
+        }
+        None
+    }
 }
 
 #[async_trait]
@@ -164,14 +190,44 @@ impl Converter for HtmlConverter {
         let markdown_string = self.convert_html(&html_content)?;
 
         // Handle empty content case - provide minimal markdown for empty HTML
-        let final_markdown = if markdown_string.trim().is_empty() {
+        let markdown_content = if markdown_string.trim().is_empty() {
             "<!-- Empty HTML document -->".to_string()
         } else {
             markdown_string
         };
 
-        // Wrap in Markdown type with validation
-        Markdown::new(final_markdown)
+        // Only generate frontmatter if configured to include it
+        if self.output_config.include_frontmatter {
+            // Generate frontmatter
+            let now = Utc::now();
+            let mut builder = FrontmatterBuilder::new(url.to_string())
+                .exporter(format!("markdowndown-html-{}", env!("CARGO_PKG_VERSION")))
+                .download_date(now)
+                .additional_field("converted_at".to_string(), now.to_rfc3339())
+                .additional_field("conversion_type".to_string(), "html".to_string())
+                .additional_field("url".to_string(), url.to_string());
+
+            // Try to extract title from HTML
+            if let Some(title) = self.extract_title(&html_content) {
+                builder = builder.additional_field("title".to_string(), title);
+            }
+
+            // Add custom frontmatter fields from configuration
+            for (key, value) in &self.output_config.custom_frontmatter_fields {
+                builder = builder.additional_field(key.clone(), value.clone());
+            }
+
+            let frontmatter = builder.build()?;
+
+            // Combine frontmatter with content
+            let markdown_with_frontmatter = format!("{frontmatter}\n{markdown_content}");
+
+            // Wrap in Markdown type with validation
+            Markdown::new(markdown_with_frontmatter)
+        } else {
+            // No frontmatter - just return the markdown content
+            Markdown::new(markdown_content)
+        }
     }
 
     /// Returns the name of this converter.

@@ -110,7 +110,8 @@ mod converter_creation_tests {
     fn test_html_converter_with_config() {
         let client = HttpClient::new();
         let config = HtmlConverterConfig::default();
-        let converter = HtmlConverter::with_config(client, config);
+        let output_config = markdowndown::config::OutputConfig::default();
+        let converter = HtmlConverter::with_config(client, config, output_config);
         assert_eq!(converter.name(), "HTML");
     }
 
@@ -125,7 +126,8 @@ mod converter_creation_tests {
             remove_ads: true,
             max_blank_lines: 1,
         };
-        let converter = HtmlConverter::with_config(client, config);
+        let output_config = markdowndown::config::OutputConfig::default();
+        let converter = HtmlConverter::with_config(client, config, output_config);
         assert_eq!(converter.name(), "HTML");
     }
 }
@@ -587,7 +589,8 @@ mod configuration_tests {
             remove_ads: false,
             max_blank_lines: 10,
         };
-        let converter = HtmlConverter::with_config(client, html_config);
+        let output_config = markdowndown::config::OutputConfig::default();
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
 
         let url = format!("{}/config-test.html", server.url());
         let result = converter.convert(&url).await;

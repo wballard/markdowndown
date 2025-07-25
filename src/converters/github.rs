@@ -646,9 +646,15 @@ impl GitHubConverter {
         resource: &GitHubResource,
         issue: &Issue,
     ) -> Result<String, MarkdownError> {
+        let now = Utc::now();
         let mut builder = FrontmatterBuilder::new(resource.original_url.clone())
             .exporter(format!("markdowndown-github-{}", env!("CARGO_PKG_VERSION")))
-            .download_date(Utc::now())
+            .download_date(now)
+            .additional_field("title".to_string(), issue.title.clone())
+            .additional_field("url".to_string(), resource.original_url.clone())
+            .additional_field("converter".to_string(), "GitHubIssueConverter".to_string())
+            .additional_field("converted_at".to_string(), now.to_rfc3339())
+            .additional_field("conversion_type".to_string(), "github".to_string())
             .additional_field("github_issue_number".to_string(), issue.number.to_string())
             .additional_field(
                 "github_repository".to_string(),

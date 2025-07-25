@@ -266,7 +266,9 @@ async fn test_configuration_propagation() -> Result<(), Box<dyn std::error::Erro
         "Should include custom frontmatter field: test_run"
     );
     assert!(
-        frontmatter.contains("config_test: \"true\"") || frontmatter.contains("config_test: true"),
+        frontmatter.contains("config_test: \"true\"")
+            || frontmatter.contains("config_test: true")
+            || frontmatter.contains("config_test: 'true'"),
         "Should include custom frontmatter field: config_test"
     );
 

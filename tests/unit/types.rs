@@ -250,7 +250,6 @@ mod url_type_tests {
     fn test_url_type_display() {
         assert_eq!(format!("{}", UrlType::Html), "HTML");
         assert_eq!(format!("{}", UrlType::GoogleDocs), "Google Docs");
-        assert_eq!(format!("{}", // UrlType::Office365 removed), "Office 365");
         assert_eq!(format!("{}", UrlType::GitHubIssue), "GitHub Issue");
     }
 
@@ -258,8 +257,6 @@ mod url_type_tests {
     fn test_url_type_equality() {
         assert_eq!(UrlType::Html, UrlType::Html);
         assert_ne!(UrlType::Html, UrlType::GoogleDocs);
-        assert_ne!(UrlType::GoogleDocs, // UrlType::Office365 removed);
-        assert_ne!(// UrlType::Office365 removed, UrlType::GitHubIssue);
     }
 
     #[test]
@@ -271,12 +268,7 @@ mod url_type_tests {
 
     #[test]
     fn test_url_type_serialization() {
-        let url_types = [
-            UrlType::Html,
-            UrlType::GoogleDocs,
-            // UrlType::Office365 removed,
-            UrlType::GitHubIssue,
-        ];
+        let url_types = [UrlType::Html, UrlType::GoogleDocs, UrlType::GitHubIssue];
 
         for url_type in url_types {
             // Test YAML serialization
@@ -301,7 +293,6 @@ mod url_type_tests {
 
         assert_eq!(map.get(&UrlType::Html), Some(&"HTML content"));
         assert_eq!(map.get(&UrlType::GoogleDocs), Some(&"Google Docs content"));
-        assert_eq!(map.get(&// UrlType::Office365 removed), None);
     }
 }
 

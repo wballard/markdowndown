@@ -21,10 +21,8 @@ pub mod html;
 /// Google Docs to markdown converter
 pub mod google_docs;
 
-
 /// GitHub Issues to markdown converter
 pub mod github;
-
 
 // Re-export main converter types for convenience
 pub use config::HtmlConverterConfig;

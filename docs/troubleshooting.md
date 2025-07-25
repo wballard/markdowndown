@@ -52,18 +52,6 @@ Error: Authentication error: Permission denied
    curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
    ```
 
-#### Office 365 Authentication Issues
-
-**Symptoms:**
-```
-Error: Authentication error: Missing token
-Error: Access denied to Office 365 document
-```
-
-**Solutions:**
-- Contact your IT administrator for proper access
-- Ensure document is shared appropriately
-- Check corporate firewall settings
 
 ### 2. Network and Connection Issues
 
@@ -294,14 +282,13 @@ Error: Cannot process this content type
        Ok(UrlType::Html) => println!("HTML page - supported"),
        Ok(UrlType::GoogleDocs) => println!("Google Docs - supported"),
        Ok(UrlType::GitHubIssue) => println!("GitHub Issue - supported"), 
-       Ok(UrlType::Office365) => println!("Office 365 - supported"),
        Err(e) => println!("Unsupported URL type: {}", e),
    }
    ```
 
 2. **Convert to Supported Format:**
    - For PDF files: Convert to HTML first
-   - For Word docs: Upload to Google Docs or Office 365
+   - For Word docs: Upload to Google Docs
    - For other formats: Check if there's a web version
 
 ### 4. Configuration Issues
@@ -531,32 +518,6 @@ Error: Repository not accessible
    - Issue number must exist
    - Issue might be in a different repository
 
-#### Office 365 Access Issues
-
-**Symptoms:**
-```
-Error: Cannot access SharePoint document
-Error: Authentication required
-```
-
-**Solutions:**
-
-1. **Check Corporate Policies:**
-   - IT policies may block programmatic access
-   - May require VPN or specific network access
-
-2. **Try Alternative URLs:**
-   ```rust
-   // Try different SharePoint URL formats
-   let urls = vec![
-       "https://company.sharepoint.com/sites/team/Document.docx",
-       "https://company-my.sharepoint.com/personal/user_company_com/Document.docx",
-   ];
-   ```
-
-3. **Contact IT Administrator:**
-   - May need special permissions for API access
-   - Might need to register application
 
 ## Diagnostic Tools
 

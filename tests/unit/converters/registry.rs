@@ -93,11 +93,7 @@ mod registry_creation_tests {
         };
         let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(
-            client,
-            html_config,
-            &output_config,
-        );
+        let registry = ConverterRegistry::with_config(client, html_config, &output_config);
         let supported_types = registry.supported_types();
 
         // Should support all URL types with custom configuration
@@ -198,7 +194,6 @@ mod converter_functionality_tests {
 
         assert_eq!(converter.name(), "Google Docs");
     }
-
 
     #[test]
     fn test_github_converter_through_registry() {
@@ -442,11 +437,7 @@ mod integration_tests {
         };
         let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(
-            client,
-            html_config,
-            &output_config,
-        );
+        let registry = ConverterRegistry::with_config(client, html_config, &output_config);
 
         // Verify all converters are properly configured
         let supported_types = registry.supported_types();
@@ -551,11 +542,7 @@ mod performance_tests {
     #[test]
     fn test_registry_lookup_performance() {
         let registry = helpers::create_test_registry();
-        let url_types = vec![
-            UrlType::Html,
-            UrlType::GoogleDocs,
-            UrlType::GitHubIssue,
-        ];
+        let url_types = vec![UrlType::Html, UrlType::GoogleDocs, UrlType::GitHubIssue];
 
         let start = std::time::Instant::now();
 

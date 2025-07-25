@@ -270,22 +270,6 @@ mod url_detection_properties {
             }
         }
 
-        #[test]
-        fn test_office365_urls_detected(
-            domain in prop::string::string_regex("[a-z0-9-]{1,20}").unwrap(),
-            path in prop::string::string_regex("[a-zA-Z0-9/_.-]{1,50}").unwrap()
-        ) {
-            let url = format!("https://{domain}.sharepoint.com/{path}");
-
-            match detect_url_type(&url) {
-                Ok(url_type) => {
-                    prop_assert_eq!(url_type, // UrlType::Office365 removed);
-                }
-                Err(_) => {
-                    // Some URLs might be invalid, which is acceptable
-                }
-            }
-        }
 
         #[test]
         fn test_html_urls_as_fallback(url in valid_http_url_strategy()) {
@@ -343,16 +327,12 @@ mod configuration_properties {
         #[test]
         fn test_config_token_preservation(
             github_token in prop::option::of(prop::string::string_regex("[a-zA-Z0-9_]{10,50}").unwrap()),
-            office365_token in prop::option::of(prop::string::string_regex("[a-zA-Z0-9_]{10,50}").unwrap()),
             google_api_key in prop::option::of(prop::string::string_regex("[a-zA-Z0-9_]{10,50}").unwrap())
         ) {
             let mut builder = Config::builder();
 
             if let Some(ref token) = github_token {
                 builder = builder.github_token(token);
-            }
-            if let Some(ref token) = office365_token {
-                builder = builder.office365_token(token);
             }
             if let Some(ref key) = google_api_key {
                 builder = builder.google_api_key(key);
@@ -361,7 +341,6 @@ mod configuration_properties {
             let config = builder.build();
 
             prop_assert_eq!(config.auth.github_token, github_token);
-            prop_assert_eq!(config.auth.office365_token, office365_token);
             prop_assert_eq!(config.auth.google_api_key, google_api_key);
         }
 
@@ -585,7 +564,6 @@ mod markdowndown_api_properties {
         // Should include the core types
         assert!(types1.contains(&UrlType::Html));
         assert!(types1.contains(&UrlType::GoogleDocs));
-        assert!(types1.contains(&// UrlType::Office365 removed));
         assert!(types1.contains(&UrlType::GitHubIssue));
     }
 

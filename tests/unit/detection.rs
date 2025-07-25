@@ -29,19 +29,6 @@ mod helpers {
                 ],
             ),
             (
-                // UrlType::Office365 removed,
-                vec![
-                    "https://company.sharepoint.com/sites/team/Document.docx",
-                    "https://tenant.sharepoint.com/personal/user/Documents/file.xlsx",
-                    "https://mycompany.sharepoint.com/sites/project/Lists/Tasks",
-                    "https://onedrive.live.com/view.aspx?resid=123456",
-                    "https://onedrive.live.com/edit.aspx?cid=789&resid=456",
-                    "https://company.office.com/document.docx",
-                    "https://outlook.live.com/mail/inbox",
-                    "https://company.outlook.com/calendar",
-                ],
-            ),
-            (
                 UrlType::GitHubIssue,
                 vec![
                     "https://github.com/owner/repo/issues/123",
@@ -146,72 +133,6 @@ mod url_type_detection_tests {
         for url in drive_urls {
             let result = detector.detect_type(url).unwrap();
             assert_eq!(result, UrlType::GoogleDocs, "Failed for URL: {url}");
-        }
-    }
-
-    #[test]
-    fn test_office365_sharepoint_detection() {
-        let detector = helpers::create_detector();
-
-        let sharepoint_urls = [
-            "https://company.sharepoint.com/sites/team/Document.docx",
-            "https://tenant.sharepoint.com/personal/user_company_com/Documents/file.xlsx",
-            "https://myorg.sharepoint.com/sites/project/Lists/Tasks/AllItems.aspx",
-            "https://contoso.sharepoint.com/teams/marketing/Shared%20Documents/presentation.pptx",
-        ];
-
-        for url in sharepoint_urls {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for URL: {url}");
-        }
-    }
-
-    #[test]
-    fn test_office365_onedrive_detection() {
-        let detector = helpers::create_detector();
-
-        let onedrive_urls = [
-            "https://onedrive.live.com/view.aspx?resid=123456&authkey=xyz",
-            "https://onedrive.live.com/edit.aspx?cid=789&resid=456",
-            "https://onedrive.live.com/redir?resid=ABC123",
-        ];
-
-        for url in onedrive_urls {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for URL: {url}");
-        }
-    }
-
-    #[test]
-    fn test_office365_office_com_detection() {
-        let detector = helpers::create_detector();
-
-        let office_urls = [
-            "https://company.office.com/document.docx",
-            "https://tenant.office.com/excel/workbook.xlsx",
-            "https://myorg.office.com/powerpoint/presentation.pptx",
-        ];
-
-        for url in office_urls {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for URL: {url}");
-        }
-    }
-
-    #[test]
-    fn test_office365_outlook_detection() {
-        let detector = helpers::create_detector();
-
-        let outlook_urls = [
-            "https://outlook.live.com/mail/inbox",
-            "https://outlook.live.com/calendar",
-            "https://company.outlook.com/owa",
-            "https://tenant.outlook.com/mail",
-        ];
-
-        for url in outlook_urls {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for URL: {url}");
         }
     }
 
@@ -806,14 +727,6 @@ mod edge_case_tests {
                 "https://GitHub.com/owner/repo/pull/456",
                 UrlType::GitHubIssue,
             ),
-            (
-                "https://COMPANY.SHAREPOINT.COM/sites/team",
-                // UrlType::Office365 removed,
-            ),
-            (
-                "https://Company.SharePoint.com/sites/team",
-                // UrlType::Office365 removed,
-            ),
         ];
 
         for (url, expected_type) in case_variants {
@@ -829,61 +742,6 @@ mod edge_case_tests {
 /// Tests for wildcard domain matching
 mod wildcard_domain_tests {
     use super::*;
-
-    #[test]
-    fn test_sharepoint_wildcard_matching() {
-        let detector = helpers::create_detector();
-
-        let sharepoint_domains = [
-            "https://company.sharepoint.com/sites/team",
-            "https://tenant.sharepoint.com/personal/user",
-            "https://organization.sharepoint.com/teams/project",
-            "https://sharepoint.com/sites/test", // Root domain should also match
-        ];
-
-        for url in sharepoint_domains {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(
-                result,
-                // UrlType::Office365 removed,
-                "Failed for SharePoint URL: {url}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_office_com_wildcard_matching() {
-        let detector = helpers::create_detector();
-
-        let office_domains = [
-            "https://company.office.com/document",
-            "https://tenant.office.com/excel",
-            "https://organization.office.com/powerpoint",
-            "https://office.com/app", // Root domain should also match
-        ];
-
-        for url in office_domains {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for Office URL: {url}");
-        }
-    }
-
-    #[test]
-    fn test_outlook_wildcard_matching() {
-        let detector = helpers::create_detector();
-
-        let outlook_domains = [
-            "https://company.outlook.com/mail",
-            "https://tenant.outlook.com/calendar",
-            "https://organization.outlook.com/owa",
-            "https://outlook.com/app", // Root domain should also match
-        ];
-
-        for url in outlook_domains {
-            let result = detector.detect_type(url).unwrap();
-            assert_eq!(result, // UrlType::Office365 removed, "Failed for Outlook URL: {url}");
-        }
-    }
 
     #[test]
     fn test_non_matching_domains() {
@@ -949,7 +807,7 @@ mod property_tests {
             if result.is_ok() {
                 let url_type = result.unwrap();
                 // Should be one of the supported types
-                assert!(matches!(url_type, UrlType::Html | UrlType::GoogleDocs | // UrlType::Office365 removed | UrlType::GitHubIssue));
+                assert!(matches!(url_type, UrlType::Html | UrlType::GoogleDocs | UrlType::GitHubIssue));
             }
         }
 
@@ -991,11 +849,6 @@ mod integration_tests {
                 UrlType::GitHubIssue,
                 "https://github.com/owner/repo/issues/123",
             ),
-            (
-                "https://company.sharepoint.com/sites/team?utm_medium=social&view=list",
-                // UrlType::Office365 removed,
-                "https://company.sharepoint.com/sites/team?view=list",
-            ),
         ];
 
         for (original_url, expected_type, expected_normalized) in test_cases {
@@ -1020,7 +873,6 @@ mod integration_tests {
         let urls_with_tracking = [
             "https://docs.google.com/document/d/123/edit?utm_source=email&usp=sharing&utm_medium=social",
             "https://github.com/owner/repo/issues/123?ref=notification&utm_campaign=test&tab=timeline",
-            "https://company.sharepoint.com/sites/team?utm_medium=social&view=list&utm_source=app",
             "https://example.com/article?utm_source=newsletter&category=tech&utm_campaign=weekly",
         ];
 

@@ -149,7 +149,6 @@ mod markdowndown_creation_tests {
         let types = md.supported_types();
         assert!(types.contains(&UrlType::Html));
         assert!(types.contains(&UrlType::GoogleDocs));
-        assert!(types.contains(&// UrlType::Office365 removed));
         assert!(types.contains(&UrlType::GitHubIssue));
     }
 
@@ -182,7 +181,7 @@ mod markdowndown_creation_tests {
         let _registry = md.registry();
         let types = md.supported_types();
 
-        assert_eq!(types.len(), 4); // HTML, GoogleDocs, Office365, GitHubIssue
+        assert_eq!(types.len(), 3); // HTML, GoogleDocs, GitHubIssue
     }
 }
 
@@ -316,56 +315,6 @@ mod end_to_end_conversion_tests {
         assert!(content.contains("Add support for custom themes"));
         assert!(content.contains("enhancement"));
         assert!(content.contains("good first issue"));
-    }
-
-    #[tokio::test]
-    async fn test_convert_office365_url_end_to_end() {
-        let mut server = Server::new_async().await;
-        let html_content = r#"<!DOCTYPE html>
-<html>
-<head><title>SharePoint Document</title></head>
-<body>
-    <div class="document-content">
-        <h1>Company Policy Document</h1>
-        <p>This document outlines our company policies and procedures.</p>
-        <h2>Remote Work Policy</h2>
-        <p>Employees may work remotely up to 3 days per week with manager approval.</p>
-        <h2>Code of Conduct</h2>
-        <p>All employees must adhere to our professional standards.</p>
-    </div>
-</body>
-</html>"#;
-
-        let mock = server
-            .mock("GET", "/sites/company/Shared%20Documents/policy.docx")
-            .with_status(200)
-            .with_header("content-type", "text/html; charset=utf-8")
-            .with_body(html_content)
-            .create_async()
-            .await;
-
-        let config = Config::builder()
-            .timeout_seconds(5)
-            .office365_token("test_token")
-            .build();
-        let md = MarkdownDown::with_config(config);
-
-        let url = format!(
-            "{}/sites/company/Shared%20Documents/policy.docx",
-            server.url()
-        );
-        let result = md.convert_url(&url).await;
-
-        mock.assert_async().await;
-        assert!(result.is_ok());
-
-        let markdown = result.unwrap();
-        let content = markdown.content_only();
-
-        // Verify content was processed
-        assert!(content.contains("Company Policy Document"));
-        assert!(content.contains("Remote Work Policy"));
-        assert!(content.contains("Code of Conduct"));
     }
 }
 
@@ -661,7 +610,7 @@ mod convenience_function_tests {
 
         let office_result = detect_url_type("https://company.sharepoint.com/doc.docx");
         assert!(office_result.is_ok());
-        assert_eq!(office_result.unwrap(), // UrlType::Office365 removed);
+        assert_eq!(office_result.unwrap(), UrlType::Html);
 
         let github_result = detect_url_type("https://github.com/owner/repo/issues/123");
         assert!(github_result.is_ok());

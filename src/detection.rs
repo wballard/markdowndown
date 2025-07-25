@@ -393,7 +393,6 @@ mod tests {
         assert_eq!(result, UrlType::GoogleDocs);
     }
 
-
     #[test]
     fn test_detect_github_issue() {
         let detector = UrlDetector::new();

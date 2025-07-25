@@ -54,7 +54,6 @@ pub struct Config {
     pub output: OutputConfig,
 }
 
-
 /// HTTP client configuration options.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
@@ -424,7 +423,6 @@ impl ConfigBuilder {
         self.output.max_consecutive_blank_lines = lines;
         self
     }
-
 
     /// Builds the final configuration.
     ///

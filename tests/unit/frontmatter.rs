@@ -727,10 +727,6 @@ mod integration_tests {
                 "https://docs.google.com/document/d/123/edit",
             ),
             (
-                "Office365Converter",
-                "https://company.sharepoint.com/doc.docx",
-            ),
-            (
                 "GitHubIssueConverter",
                 "https://github.com/owner/repo/issues/123",
             ),

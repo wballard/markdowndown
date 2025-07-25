@@ -3,8 +3,7 @@
 use markdowndown::client::HttpClient;
 use markdowndown::config::Config;
 use markdowndown::converters::{
-    ConverterRegistry, GoogleDocsConverter, HtmlConverter,
-    HtmlConverterConfig,
+    ConverterRegistry, GoogleDocsConverter, HtmlConverter, HtmlConverterConfig,
 };
 use markdowndown::types::UrlType;
 use std::time::Duration;
@@ -18,7 +17,6 @@ pub fn create_test_http_client() -> HttpClient {
     HttpClient::with_config(&config.http, &config.auth)
 }
 
-
 /// Create a basic HTML converter for testing
 pub fn create_html_converter() -> HtmlConverter {
     HtmlConverter::new()
@@ -31,13 +29,10 @@ pub fn create_html_converter_with_client(client: HttpClient) -> HtmlConverter {
     HtmlConverter::with_config(client, config, output_config)
 }
 
-
 /// Create a basic Google Docs converter for testing
 pub fn create_google_docs_converter() -> GoogleDocsConverter {
     GoogleDocsConverter::new()
 }
-
-
 
 /// Create a basic converter registry for testing
 pub fn create_converter_registry() -> ConverterRegistry {
@@ -50,11 +45,7 @@ pub fn create_configured_converter_registry() -> ConverterRegistry {
     let http_client = HttpClient::with_config(&config.http, &config.auth);
     let html_config = HtmlConverterConfig::default();
     let output_config = markdowndown::config::OutputConfig::default();
-    ConverterRegistry::with_config(
-        http_client,
-        html_config,
-        &output_config,
-    )
+    ConverterRegistry::with_config(http_client, html_config, &output_config)
 }
 
 /// Get sample URLs for each converter type
@@ -166,30 +157,6 @@ pub const SAMPLE_GOOGLE_DOCS_HTML: &str = r#"<!DOCTYPE html>
 </body>
 </html>"#;
 
-/// Sample Office365 HTML content
-pub const SAMPLE_OFFICE365_HTML: &str = r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Document - SharePoint</title>
-</head>
-<body>
-    <div class="office-content">
-        <h1>Project Proposal</h1>
-        <p>This is a sample Office365 document for testing.</p>
-        
-        <h2>Overview</h2>
-        <p>The project aims to improve efficiency and reduce costs.</p>
-        
-        <h2>Requirements</h2>
-        <ul>
-            <li>Technical requirements</li>
-            <li>Resource requirements</li>
-            <li>Timeline requirements</li>
-        </ul>
-    </div>
-</body>
-</html>"#;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,13 +181,12 @@ mod tests {
         assert!(SAMPLE_HTML_CONTENT.len() > 100);
         assert!(SAMPLE_GITHUB_ISSUE_HTML.len() > 100);
         assert!(SAMPLE_GOOGLE_DOCS_HTML.len() > 100);
-        assert!(SAMPLE_OFFICE365_HTML.len() > 100);
     }
 
     #[test]
     fn test_sample_urls() {
         let urls = sample_urls_by_converter();
-        assert_eq!(urls.len(), 4);
+        assert_eq!(urls.len(), 3);
 
         for (url_type, url_list) in urls {
             assert!(

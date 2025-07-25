@@ -10,7 +10,6 @@ markdowndown automatically detects URL types and routes them to appropriate conv
 |----------|------------------|------------------|
 | **HTML** | Any HTTP/HTTPS URL | Clean HTML-to-markdown conversion |
 | **Google Docs** | `docs.google.com/document/` | Direct export API access |
-| **Office 365** | `sharepoint.com`, `onedrive.com` | Document download and conversion |
 | **GitHub Issues** | `github.com/.../issues/` or `.../pull/` | API-based content extraction |
 
 ## HTML Pages
@@ -192,87 +191,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
    Solution: Increase timeout for large documents
    ```
 
-## Office 365 Documents
 
-Office 365 documents from SharePoint and OneDrive are supported with specialized handling.
 
-### Supported URLs
 
-```rust
-// SharePoint documents
-"https://company.sharepoint.com/sites/team/Shared%20Documents/Document.docx"
-
-// OneDrive documents  
-"https://company-my.sharepoint.com/personal/user_company_com/Documents/Document.docx"
-
-// Office Online documents
-"https://company.sharepoint.com/:w:/r/sites/team/_layouts/15/Doc.aspx?sourcedoc={id}"
-```
-
-### Features
-
-- **Document Download**: Downloads Office documents for conversion
-- **Format Support**: Handles .docx, .xlsx, .pptx files
-- **Authentication**: Supports Office 365 authentication
-- **Metadata Extraction**: Preserves document properties
-- **Version Handling**: Gets current version
-
-### Configuration
-
-```rust
-use markdowndown::{MarkdownDown, Config};
-
-let config = Config::builder()
-    .office365_token(std::env::var("OFFICE365_TOKEN").ok()) // Required for private docs
-    .timeout_seconds(180)       // Office docs can be very slow
-    .max_retries(2)            // Retry on download failures
-    .user_agent("DocumentProcessor/1.0")
-    .build();
-
-let md = MarkdownDown::with_config(config);
-```
-
-### Example Usage
-
-```rust
-use markdowndown::convert_url;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let office_url = "https://company.sharepoint.com/sites/team/Document.docx";
-    
-    // Note: This may require authentication for private documents
-    match convert_url(office_url).await {
-        Ok(markdown) => {
-            println!("✅ Office 365 conversion successful");
-            println!("Document length: {} characters", markdown.as_str().len());
-            
-            // Office documents often have rich metadata
-            if let Some(frontmatter) = markdown.frontmatter() {
-                println!("📊 Document metadata available");
-                println!("{}", frontmatter);
-            }
-        }
-        Err(e) => {
-            eprintln!("❌ Office 365 conversion failed: {}", e);
-            
-            if e.to_string().contains("401") || e.to_string().contains("authentication") {
-                eprintln!("🔐 Authentication required - set OFFICE365_TOKEN environment variable");
-            }
-        }
-    }
-    
-    Ok(())
-}
-```
-
-### Office 365 Considerations
-
-- **Authentication**: Most corporate documents require authentication
-- **File Size**: Large documents take significantly longer
-- **Network Latency**: SharePoint can be slow depending on location
-- **Document Types**: .docx works best, .xlsx and .pptx have limited support
-- **Corporate Policies**: IT policies may block programmatic access
 
 ## GitHub Issues and Pull Requests
 
@@ -466,7 +387,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "https://example.com/article",
         "https://docs.google.com/document/d/abc123/edit", 
         "https://github.com/owner/repo/issues/123",
-        "https://company.sharepoint.com/Document.docx",
     ];
     
     for url in urls {
@@ -509,12 +429,6 @@ async fn convert_with_type_specific_config(url: &str) -> Result<String, Box<dyn 
                 .timeout_seconds(60)
                 .build()
         }
-        UrlType::Office365 => {
-            Config::builder()
-                .office365_token(std::env::var("OFFICE365_TOKEN").ok())
-                .timeout_seconds(180)
-                .build()
-        }
     };
     
     let md = MarkdownDown::with_config(config);
@@ -543,11 +457,6 @@ async fn convert_with_type_specific_config(url: &str) -> Result<String, Box<dyn 
 - Be aware of repository access permissions
 - Consider pagination for issues with many comments
 
-### Office 365
-- Expect longer processing times
-- Implement proper authentication
-- Handle corporate firewall restrictions
-- Test with different document types
 
 ## Performance Comparison
 
@@ -556,7 +465,6 @@ async fn convert_with_type_specific_config(url: &str) -> Result<String, Box<dyn 
 | **HTML** | 1-5 seconds | Page size, server speed, complexity |
 | **Google Docs** | 2-10 seconds | Document size, formatting complexity |
 | **GitHub Issues** | 1-8 seconds | Comment count, API rate limits |
-| **Office 365** | 5-60 seconds | Document size, network latency |
 
 ## Error Handling by Type
 

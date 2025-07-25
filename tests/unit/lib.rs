@@ -149,7 +149,7 @@ mod markdowndown_creation_tests {
         let types = md.supported_types();
         assert!(types.contains(&UrlType::Html));
         assert!(types.contains(&UrlType::GoogleDocs));
-        assert!(types.contains(&UrlType::Office365));
+        assert!(types.contains(&// UrlType::Office365 removed));
         assert!(types.contains(&UrlType::GitHubIssue));
     }
 
@@ -661,7 +661,7 @@ mod convenience_function_tests {
 
         let office_result = detect_url_type("https://company.sharepoint.com/doc.docx");
         assert!(office_result.is_ok());
-        assert_eq!(office_result.unwrap(), UrlType::Office365);
+        assert_eq!(office_result.unwrap(), // UrlType::Office365 removed);
 
         let github_result = detect_url_type("https://github.com/owner/repo/issues/123");
         assert!(github_result.is_ok());

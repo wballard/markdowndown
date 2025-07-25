@@ -4,7 +4,7 @@
 //! of URL types to specific converter implementations.
 
 use markdowndown::client::HttpClient;
-use markdowndown::config::{Config, PlaceholderSettings};
+use markdowndown::config::Config;
 use markdowndown::converters::{
     Converter, ConverterRegistry, GoogleDocsConverter, HtmlConverter, HtmlConverterConfig,
 };
@@ -26,12 +26,9 @@ mod helpers {
             .build();
         let client = HttpClient::with_config(&config.http, &config.auth);
         let html_config = HtmlConverterConfig::default();
-        let placeholder_settings = PlaceholderSettings {
-            max_content_length: 2000,
-        };
         let output_config = markdowndown::config::OutputConfig::default();
 
-        ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config)
+        ConverterRegistry::with_config(client, html_config, &output_config)
     }
 
     /// Test URL mappings for each converter type
@@ -41,10 +38,6 @@ mod helpers {
             (
                 UrlType::GoogleDocs,
                 "https://docs.google.com/document/d/123/edit",
-            ),
-            (
-                UrlType::Office365,
-                "https://company.sharepoint.com/sites/team/doc.docx",
             ),
             (
                 UrlType::GitHubIssue,
@@ -66,9 +59,8 @@ mod registry_creation_tests {
         // Should support all major URL types
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
-        assert!(supported_types.contains(&UrlType::Office365));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
     }
 
     #[test]
@@ -79,9 +71,8 @@ mod registry_creation_tests {
         // Default should be equivalent to new()
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
-        assert!(supported_types.contains(&UrlType::Office365));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
     }
 
     #[test]
@@ -100,24 +91,19 @@ mod registry_creation_tests {
             remove_ads: true,
             max_blank_lines: 1,
         };
-        let placeholder_settings = PlaceholderSettings {
-            max_content_length: 1500,
-        };
         let output_config = markdowndown::config::OutputConfig::default();
 
         let registry = ConverterRegistry::with_config(
             client,
             html_config,
-            &placeholder_settings,
             &output_config,
         );
         let supported_types = registry.supported_types();
 
         // Should support all URL types with custom configuration
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
-        assert!(supported_types.contains(&UrlType::Office365));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
     }
 }
@@ -139,7 +125,6 @@ mod converter_management_tests {
             match url_type {
                 UrlType::Html => assert_eq!(converter.name(), "HTML"),
                 UrlType::GoogleDocs => assert_eq!(converter.name(), "Google Docs"),
-                UrlType::Office365 => assert_eq!(converter.name(), "Office 365"),
                 UrlType::GitHubIssue => assert_eq!(converter.name(), "GitHub Issue"),
             }
         }
@@ -214,13 +199,6 @@ mod converter_functionality_tests {
         assert_eq!(converter.name(), "Google Docs");
     }
 
-    #[test]
-    fn test_office365_converter_through_registry() {
-        let registry = helpers::create_test_registry();
-        let converter = registry.get_converter(&UrlType::Office365).unwrap();
-
-        assert_eq!(converter.name(), "Office 365");
-    }
 
     #[test]
     fn test_github_converter_through_registry() {
@@ -260,7 +238,7 @@ mod configuration_propagation_tests {
 
         // All converters should be present
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
 
         // Verify each converter is accessible
         for url_type in supported_types {
@@ -348,7 +326,7 @@ mod error_handling_tests {
 
         // Registry should still have same number of converters
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
     }
 }
 
@@ -378,7 +356,6 @@ mod integration_tests {
         let test_cases = vec![
             (UrlType::Html, "HTML"),
             (UrlType::GoogleDocs, "Google Docs"),
-            (UrlType::Office365, "Office 365"),
             (UrlType::GitHubIssue, "GitHub Issue"),
         ];
 
@@ -463,21 +440,17 @@ mod integration_tests {
             remove_ads: false,
             max_blank_lines: 5,
         };
-        let placeholder_settings = PlaceholderSettings {
-            max_content_length: 5000,
-        };
         let output_config = markdowndown::config::OutputConfig::default();
 
         let registry = ConverterRegistry::with_config(
             client,
             html_config,
-            &placeholder_settings,
             &output_config,
         );
 
         // Verify all converters are properly configured
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 4);
+        assert_eq!(supported_types.len(), 3);
 
         for url_type in supported_types {
             let converter = registry.get_converter(&url_type);
@@ -488,7 +461,6 @@ mod integration_tests {
             match url_type {
                 UrlType::Html => assert_eq!(converter.name(), "HTML"),
                 UrlType::GoogleDocs => assert_eq!(converter.name(), "Google Docs"),
-                UrlType::Office365 => assert_eq!(converter.name(), "Office 365"),
                 UrlType::GitHubIssue => assert_eq!(converter.name(), "GitHub Issue"),
             }
         }
@@ -563,10 +535,6 @@ mod extensibility_tests {
 
         // Original converters should remain
         assert_eq!(
-            registry.get_converter(&UrlType::Office365).unwrap().name(),
-            "Office 365"
-        );
-        assert_eq!(
             registry
                 .get_converter(&UrlType::GitHubIssue)
                 .unwrap()
@@ -586,7 +554,6 @@ mod performance_tests {
         let url_types = vec![
             UrlType::Html,
             UrlType::GoogleDocs,
-            UrlType::Office365,
             UrlType::GitHubIssue,
         ];
 

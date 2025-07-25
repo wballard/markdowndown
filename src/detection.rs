@@ -140,12 +140,6 @@ impl UrlDetector {
             // Google Docs patterns
             Pattern::new("docs.google.com", Some("/document/"), UrlType::GoogleDocs),
             Pattern::new("drive.google.com", Some("/file/"), UrlType::GoogleDocs),
-            // Office 365 patterns
-            Pattern::new("*.sharepoint.com", None, UrlType::Office365),
-            Pattern::new("onedrive.live.com", None, UrlType::Office365),
-            Pattern::new("*.office.com", None, UrlType::Office365),
-            Pattern::new("outlook.live.com", None, UrlType::Office365),
-            Pattern::new("*.outlook.com", None, UrlType::Office365),
             // GitHub patterns (handled separately due to complexity)
         ];
 
@@ -399,21 +393,6 @@ mod tests {
         assert_eq!(result, UrlType::GoogleDocs);
     }
 
-    #[test]
-    fn test_detect_sharepoint() {
-        let detector = UrlDetector::new();
-        let url = "https://company.sharepoint.com/sites/team/document.docx";
-        let result = detector.detect_type(url).unwrap();
-        assert_eq!(result, UrlType::Office365);
-    }
-
-    #[test]
-    fn test_detect_onedrive() {
-        let detector = UrlDetector::new();
-        let url = "https://onedrive.live.com/view.aspx?resid=123";
-        let result = detector.detect_type(url).unwrap();
-        assert_eq!(result, UrlType::Office365);
-    }
 
     #[test]
     fn test_detect_github_issue() {
@@ -463,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_pattern_domain_wildcard_matching() {
-        let pattern = Pattern::new("*.sharepoint.com", None, UrlType::Office365);
+        let pattern = Pattern::new("*.sharepoint.com", None, UrlType::Html);
         let url = ParsedUrl::parse("https://company.sharepoint.com/sites/team").unwrap();
         assert!(pattern.matches(&url));
 
@@ -537,11 +516,6 @@ mod tests {
         let url = "https://github.com/owner/repo/pull/789#pullrequestreview-123";
         let result = detector.detect_type(url).unwrap();
         assert_eq!(result, UrlType::GitHubIssue);
-
-        // Custom SharePoint domain
-        let url = "https://mycompany.sharepoint.com/personal/user/Documents/file.docx";
-        let result = detector.detect_type(url).unwrap();
-        assert_eq!(result, UrlType::Office365);
     }
 
     #[test]

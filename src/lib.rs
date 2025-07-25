@@ -120,11 +120,10 @@ impl MarkdownDown {
         // Create configured HTTP client
         let http_client = HttpClient::with_config(&config.http, &config.auth);
 
-        // Create registry with configured HTTP client, HTML config, placeholder settings, and output config
+        // Create registry with configured HTTP client, HTML config, and output config
         let registry = ConverterRegistry::with_config(
             http_client,
             config.html.clone(),
-            &config.placeholder,
             &config.output,
         );
 
@@ -388,7 +387,6 @@ mod tests {
         assert!(config.auth.github_token.is_none());
         assert!(config.auth.office365_token.is_none());
         assert!(config.auth.google_api_key.is_none());
-        assert_eq!(config.placeholder.max_content_length, 1000);
         assert!(config.output.include_frontmatter);
         assert_eq!(config.output.max_consecutive_blank_lines, 2);
     }
@@ -401,7 +399,6 @@ mod tests {
             .user_agent("TestApp/1.0")
             .max_retries(5)
             .github_token("test_token")
-            .placeholder_max_content_length(2000)
             .include_frontmatter(false)
             .max_consecutive_blank_lines(1)
             .build();
@@ -417,7 +414,6 @@ mod tests {
             stored_config.auth.github_token,
             Some("test_token".to_string())
         );
-        assert_eq!(stored_config.placeholder.max_content_length, 2000);
         assert!(!stored_config.output.include_frontmatter);
         assert_eq!(stored_config.output.max_consecutive_blank_lines, 1);
     }
@@ -432,7 +428,6 @@ mod tests {
             .timeout_seconds(45)
             .user_agent("IntegrationTest/2.0")
             .max_retries(3)
-            .placeholder_max_content_length(1500)
             .include_frontmatter(true)
             .custom_frontmatter_field("project", "markdowndown")
             .custom_frontmatter_field("version", "test")
@@ -450,7 +445,6 @@ mod tests {
         assert_eq!(config.http.timeout, Duration::from_secs(45));
         assert_eq!(config.http.user_agent, "IntegrationTest/2.0");
         assert_eq!(config.http.max_retries, 3);
-        assert_eq!(config.placeholder.max_content_length, 1500);
         assert!(config.output.include_frontmatter);
         assert_eq!(config.output.custom_frontmatter_fields.len(), 2);
         assert_eq!(
@@ -482,9 +476,6 @@ mod tests {
         assert!(config.auth.office365_token.is_none());
         assert!(config.auth.google_api_key.is_none());
 
-        // Placeholder config defaults
-        assert_eq!(config.placeholder.max_content_length, 1000);
-
         // Output config defaults
         assert!(config.output.include_frontmatter);
         assert!(config.output.custom_frontmatter_fields.is_empty());
@@ -501,11 +492,10 @@ mod tests {
         // Should support at least these URL types
         assert!(supported_types.contains(&crate::types::UrlType::Html));
         assert!(supported_types.contains(&crate::types::UrlType::GoogleDocs));
-        assert!(supported_types.contains(&crate::types::UrlType::Office365));
         assert!(supported_types.contains(&crate::types::UrlType::GitHubIssue));
 
-        // Should have exactly 4 supported types
-        assert_eq!(supported_types.len(), 4);
+        // Should have exactly 3 supported types
+        assert_eq!(supported_types.len(), 3);
     }
 
     #[test]
@@ -521,12 +511,6 @@ mod tests {
         let gdocs_result = detect_url_type("https://docs.google.com/document/d/abc123/edit");
         assert!(gdocs_result.is_ok());
         assert_eq!(gdocs_result.unwrap(), crate::types::UrlType::GoogleDocs);
-
-        // Test Office 365 URL
-        let office_result =
-            detect_url_type("https://company.sharepoint.com/sites/team/Document.docx");
-        assert!(office_result.is_ok());
-        assert_eq!(office_result.unwrap(), crate::types::UrlType::Office365);
 
         // Test GitHub Issue URL
         let github_result = detect_url_type("https://github.com/owner/repo/issues/123");

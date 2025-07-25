@@ -7,7 +7,6 @@ pub mod end_to_end;
 pub mod github_issues;
 pub mod google_docs;
 pub mod html_sites;
-pub mod office365;
 pub mod performance;
 
 // Re-export common testing utilities

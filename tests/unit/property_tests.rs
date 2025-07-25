@@ -279,7 +279,7 @@ mod url_detection_properties {
 
             match detect_url_type(&url) {
                 Ok(url_type) => {
-                    prop_assert_eq!(url_type, UrlType::Office365);
+                    prop_assert_eq!(url_type, // UrlType::Office365 removed);
                 }
                 Err(_) => {
                     // Some URLs might be invalid, which is acceptable
@@ -585,7 +585,7 @@ mod markdowndown_api_properties {
         // Should include the core types
         assert!(types1.contains(&UrlType::Html));
         assert!(types1.contains(&UrlType::GoogleDocs));
-        assert!(types1.contains(&UrlType::Office365));
+        assert!(types1.contains(&// UrlType::Office365 removed));
         assert!(types1.contains(&UrlType::GitHubIssue));
     }
 

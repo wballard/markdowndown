@@ -117,7 +117,7 @@ pub fn test_urls_by_type() -> Vec<(UrlType, Vec<&'static str>)> {
             ],
         ),
         (
-            UrlType::Office365,
+            // UrlType::Office365 removed,
             vec![
                 "https://company.sharepoint.com/sites/team/Document.docx",
                 "https://tenant.sharepoint.com/personal/user/Documents/file.xlsx",

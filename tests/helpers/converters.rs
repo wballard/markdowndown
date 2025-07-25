@@ -2,10 +2,9 @@
 
 use markdowndown::client::HttpClient;
 use markdowndown::config::Config;
-use markdowndown::config::PlaceholderSettings;
 use markdowndown::converters::{
-    ConverterRegistry, GitHubIssueConverter, GoogleDocsConverter, HtmlConverter,
-    HtmlConverterConfig, Office365Converter,
+    ConverterRegistry, GoogleDocsConverter, HtmlConverter,
+    HtmlConverterConfig,
 };
 use markdowndown::types::UrlType;
 use std::time::Duration;
@@ -19,12 +18,6 @@ pub fn create_test_http_client() -> HttpClient {
     HttpClient::with_config(&config.http, &config.auth)
 }
 
-/// Create test PlaceholderSettings for converter testing
-pub fn create_test_placeholder_settings() -> PlaceholderSettings {
-    PlaceholderSettings {
-        max_content_length: 1000,
-    }
-}
 
 /// Create a basic HTML converter for testing
 pub fn create_html_converter() -> HtmlConverter {
@@ -38,37 +31,13 @@ pub fn create_html_converter_with_client(client: HttpClient) -> HtmlConverter {
     HtmlConverter::with_config(client, config, output_config)
 }
 
-/// Create a basic GitHub converter for testing
-pub fn create_github_converter() -> GitHubIssueConverter {
-    GitHubIssueConverter::new()
-}
-
-/// Create a GitHub converter with configuration
-pub fn create_github_converter_with_config(
-    client: HttpClient,
-    settings: &PlaceholderSettings,
-) -> GitHubIssueConverter {
-    GitHubIssueConverter::with_client_and_settings(client, settings)
-}
 
 /// Create a basic Google Docs converter for testing
 pub fn create_google_docs_converter() -> GoogleDocsConverter {
     GoogleDocsConverter::new()
 }
 
-/// Create a basic Office365 converter for testing  
-pub fn create_office365_converter() -> Office365Converter {
-    Office365Converter::new()
-}
 
-/// Create an Office365 converter with configuration
-pub fn create_office365_converter_with_config(
-    _client: HttpClient,
-    _settings: &PlaceholderSettings,
-) -> Office365Converter {
-    use markdowndown::converters::Office365Config;
-    Office365Converter::with_config(Office365Config::default())
-}
 
 /// Create a basic converter registry for testing
 pub fn create_converter_registry() -> ConverterRegistry {
@@ -80,12 +49,10 @@ pub fn create_configured_converter_registry() -> ConverterRegistry {
     let config = Config::builder().timeout_seconds(10).max_retries(2).build();
     let http_client = HttpClient::with_config(&config.http, &config.auth);
     let html_config = HtmlConverterConfig::default();
-    let placeholder_settings = create_test_placeholder_settings();
     let output_config = markdowndown::config::OutputConfig::default();
     ConverterRegistry::with_config(
         http_client,
         html_config,
-        &placeholder_settings,
         &output_config,
     )
 }
@@ -107,14 +74,6 @@ pub fn sample_urls_by_converter() -> Vec<(UrlType, Vec<&'static str>)> {
                 "https://docs.google.com/document/d/abc123/edit",
                 "https://docs.google.com/document/d/xyz789",
                 "https://docs.google.com/document/d/test123/edit#heading=h.abc",
-            ],
-        ),
-        (
-            UrlType::Office365,
-            vec![
-                "https://company.sharepoint.com/sites/team/Document.docx",
-                "https://tenant.sharepoint.com/personal/user/Documents/file.xlsx",
-                "https://company-my.sharepoint.com/personal/user_company_com/Documents/presentation.pptx",
             ],
         ),
         (
@@ -238,20 +197,15 @@ mod tests {
     #[test]
     fn test_create_converters() {
         let _html = create_html_converter();
-        let _github = create_github_converter();
         let _google = create_google_docs_converter();
-        let _office = create_office365_converter();
         let _registry = create_converter_registry();
     }
 
     #[test]
     fn test_create_with_config() {
         let client = create_test_http_client();
-        let settings = create_test_placeholder_settings();
 
         let _html = create_html_converter_with_client(client.clone());
-        let _github = create_github_converter_with_config(client.clone(), &settings);
-        let _office = create_office365_converter_with_config(client, &settings);
         let _registry = create_configured_converter_registry();
     }
 

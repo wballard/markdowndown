@@ -57,10 +57,6 @@ impl ConverterRegistry {
             Box::new(super::GoogleDocsConverter::new()),
         );
         registry.register(
-            UrlType::Office365,
-            Box::new(super::placeholder::Office365Converter::new()),
-        );
-        registry.register(
             UrlType::GitHubIssue,
             Box::new(super::GitHubConverter::from_env()),
         );
@@ -72,7 +68,6 @@ impl ConverterRegistry {
     pub fn with_config(
         http_client: crate::client::HttpClient,
         html_config: super::config::HtmlConverterConfig,
-        placeholder_settings: &crate::config::PlaceholderSettings,
         output_config: &crate::config::OutputConfig,
     ) -> Self {
         let mut registry = Self {
@@ -91,15 +86,6 @@ impl ConverterRegistry {
         registry.register(
             UrlType::GoogleDocs,
             Box::new(super::GoogleDocsConverter::new()), // GoogleDocs converter manages its own HttpClient
-        );
-        registry.register(
-            UrlType::Office365,
-            Box::new(
-                super::placeholder::Office365Converter::with_client_and_settings(
-                    http_client.clone(),
-                    placeholder_settings,
-                ),
-            ),
         );
         registry.register(
             UrlType::GitHubIssue,

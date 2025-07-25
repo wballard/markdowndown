@@ -239,12 +239,12 @@ mod converter_functionality_tests {
 
         // The GitHub API converter should be named "GitHub Issue"
         assert_eq!(converter.name(), "GitHub Issue");
-        
+
         // Additional verification: The converter should be the real GitHubConverter type
         // We can't directly test the type, but we can verify behavior differences
         // The placeholder would use the PlaceholderConverter pattern which has specific output
         // while the API converter has different behavior patterns
-        
+
         // For now, we verify that we have the right converter name and it's available
         assert_eq!(converter.name(), "GitHub Issue");
     }

@@ -1,1 +1,0 @@
-make sure we can fetch a local file path to a markdown file, with and without file: url prefixing

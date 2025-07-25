@@ -368,18 +368,24 @@ impl Url {
     ///
     /// Returns a `MarkdownError::InvalidUrl` if the URL format is invalid.
     pub fn new(url: String) -> Result<Self, MarkdownError> {
-        // Basic URL validation - must start with http:// or https:// and have content after
+        // Check for HTTP/HTTPS URLs
         if (url.starts_with("http://") && url.len() > 7)
             || (url.starts_with("https://") && url.len() > 8)
         {
-            Ok(Url(url))
-        } else {
-            let context = ErrorContext::new(&url, "URL validation", "Url::new");
-            Err(MarkdownError::ValidationError {
-                kind: ValidationErrorKind::InvalidUrl,
-                context,
-            })
+            return Ok(Url(url));
         }
+
+        // Check for local file paths
+        if crate::utils::is_local_file_path(&url) {
+            return Ok(Url(url));
+        }
+
+        // If neither web URL nor local file path, it's invalid
+        let context = ErrorContext::new(&url, "URL validation", "Url::new");
+        Err(MarkdownError::ValidationError {
+            kind: ValidationErrorKind::InvalidUrl,
+            context,
+        })
     }
 
     /// Returns the URL as a string slice.
@@ -419,6 +425,8 @@ pub enum UrlType {
     GoogleDocs,
     /// GitHub issues
     GitHubIssue,
+    /// Local file paths
+    LocalFile,
 }
 
 impl fmt::Display for UrlType {
@@ -427,6 +435,7 @@ impl fmt::Display for UrlType {
             UrlType::Html => write!(f, "HTML"),
             UrlType::GoogleDocs => write!(f, "Google Docs"),
             UrlType::GitHubIssue => write!(f, "GitHub Issue"),
+            UrlType::LocalFile => write!(f, "Local File"),
         }
     }
 }
@@ -1176,6 +1185,11 @@ mod tests {
                 "https://sub.domain.com/path?query=value#fragment",
                 "http://user:pass@example.com",
                 "https://example.com:443/very/long/path/with/many/segments",
+                "file:///absolute/path/to/file.md", // Local file URL (absolute)
+                "file://./relative/path.md",        // Local file URL (relative)
+                "/absolute/path/to/file.md",        // Local file path (absolute)
+                "./relative/file.md",               // Local file path (relative)
+                "document.md",                      // Simple filename
             ];
 
             for url_case in valid_url_cases {
@@ -1185,10 +1199,9 @@ mod tests {
 
             let invalid_url_cases = [
                 "ftp://example.com",       // Wrong protocol
-                "example.com",             // Missing protocol
-                "www.example.com",         // Missing protocol
+                "example.com",             // Missing protocol (domain without protocol)
+                "www.example.com",         // Missing protocol (domain without protocol)
                 "mailto:test@example.com", // Wrong protocol
-                "file:///path/to/file",    // Wrong protocol
                 "",                        // Empty string
                 "http://",                 // Incomplete
                 "https://",                // Incomplete

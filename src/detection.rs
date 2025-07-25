@@ -194,6 +194,14 @@ impl UrlDetector {
     /// # Ok::<(), markdowndown::types::MarkdownError>(())
     /// ```
     pub fn detect_type(&self, url: &str) -> Result<UrlType, MarkdownError> {
+        let trimmed = url.trim();
+
+        // Check for local file paths first (before trying to parse as URL)
+        if crate::utils::is_local_file_path(trimmed) {
+            return Ok(UrlType::LocalFile);
+        }
+
+        // Try to parse as URL for web-based sources
         let parsed_url = self.parse_url(url)?;
 
         // Special handling for GitHub issues (more complex pattern)
@@ -229,6 +237,13 @@ impl UrlDetector {
     /// Returns the normalized URL string or a `MarkdownError` if invalid.
     pub fn normalize_url(&self, url: &str) -> Result<String, MarkdownError> {
         let trimmed = url.trim();
+
+        // Handle local file paths separately (no URL parsing needed)
+        if crate::utils::is_local_file_path(trimmed) {
+            return Ok(trimmed.to_string());
+        }
+
+        // Parse as URL for web-based sources
         let mut parsed_url = self.parse_url(trimmed)?;
 
         // Remove tracking parameters
@@ -270,15 +285,26 @@ impl UrlDetector {
     pub fn validate_url(&self, url: &str) -> Result<(), MarkdownError> {
         let trimmed = url.trim();
 
-        // Basic validation - must be HTTP or HTTPS
+        // Allow local file paths
+        if crate::utils::is_local_file_path(trimmed) {
+            return Ok(());
+        }
+
+        // Basic validation - must be HTTP or HTTPS for web URLs
         if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
-            return Err(MarkdownError::InvalidUrl {
-                url: url.to_string(),
+            let context = crate::types::ErrorContext::new(url, "URL validation", "validate_url");
+            return Err(MarkdownError::ValidationError {
+                kind: crate::types::ValidationErrorKind::InvalidUrl,
+                context,
             });
         }
 
-        ParsedUrl::parse(trimmed).map_err(|_parse_error| MarkdownError::InvalidUrl {
-            url: url.to_string(),
+        ParsedUrl::parse(trimmed).map_err(|_parse_error| {
+            let context = crate::types::ErrorContext::new(url, "URL parsing", "validate_url");
+            MarkdownError::ValidationError {
+                kind: crate::types::ValidationErrorKind::InvalidUrl,
+                context,
+            }
         })?;
         Ok(())
     }

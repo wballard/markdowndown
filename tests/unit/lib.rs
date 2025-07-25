@@ -181,7 +181,7 @@ mod markdowndown_creation_tests {
         let _registry = md.registry();
         let types = md.supported_types();
 
-        assert_eq!(types.len(), 3); // HTML, GoogleDocs, GitHubIssue
+        assert_eq!(types.len(), 4); // HTML, GoogleDocs, GitHubIssue, LocalFile
     }
 }
 

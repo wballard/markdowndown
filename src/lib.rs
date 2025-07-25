@@ -33,6 +33,9 @@ pub mod detection;
 /// Configuration system
 pub mod config;
 
+/// Utility functions shared across the codebase
+pub mod utils;
+
 use crate::client::HttpClient;
 use crate::converters::ConverterRegistry;
 use crate::detection::UrlDetector;
@@ -490,9 +493,10 @@ mod tests {
         assert!(supported_types.contains(&crate::types::UrlType::Html));
         assert!(supported_types.contains(&crate::types::UrlType::GoogleDocs));
         assert!(supported_types.contains(&crate::types::UrlType::GitHubIssue));
+        assert!(supported_types.contains(&crate::types::UrlType::LocalFile));
 
-        // Should have exactly 3 supported types
-        assert_eq!(supported_types.len(), 3);
+        // Should have exactly 4 supported types
+        assert_eq!(supported_types.len(), 4);
     }
 
     #[test]

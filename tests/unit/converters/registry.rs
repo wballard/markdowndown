@@ -43,6 +43,7 @@ mod helpers {
                 UrlType::GitHubIssue,
                 "https://github.com/owner/repo/issues/123",
             ),
+            (UrlType::LocalFile, "/path/to/test.md"),
         ]
     }
 }
@@ -60,7 +61,8 @@ mod registry_creation_tests {
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
-        assert_eq!(supported_types.len(), 3);
+        assert!(supported_types.contains(&UrlType::LocalFile));
+        assert_eq!(supported_types.len(), 4);
     }
 
     #[test]
@@ -72,7 +74,8 @@ mod registry_creation_tests {
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
-        assert_eq!(supported_types.len(), 3);
+        assert!(supported_types.contains(&UrlType::LocalFile));
+        assert_eq!(supported_types.len(), 4);
     }
 
     #[test]
@@ -97,10 +100,11 @@ mod registry_creation_tests {
         let supported_types = registry.supported_types();
 
         // Should support all URL types with custom configuration
-        assert_eq!(supported_types.len(), 3);
+        assert_eq!(supported_types.len(), 4);
         assert!(supported_types.contains(&UrlType::Html));
         assert!(supported_types.contains(&UrlType::GoogleDocs));
         assert!(supported_types.contains(&UrlType::GitHubIssue));
+        assert!(supported_types.contains(&UrlType::LocalFile));
     }
 }
 
@@ -122,6 +126,7 @@ mod converter_management_tests {
                 UrlType::Html => assert_eq!(converter.name(), "HTML"),
                 UrlType::GoogleDocs => assert_eq!(converter.name(), "Google Docs"),
                 UrlType::GitHubIssue => assert_eq!(converter.name(), "GitHub Issue"),
+                UrlType::LocalFile => assert_eq!(converter.name(), "Local File Converter"),
             }
         }
     }
@@ -233,7 +238,7 @@ mod configuration_propagation_tests {
 
         // All converters should be present
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 3);
+        assert_eq!(supported_types.len(), 4);
 
         // Verify each converter is accessible
         for url_type in supported_types {
@@ -321,7 +326,7 @@ mod error_handling_tests {
 
         // Registry should still have same number of converters
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 3);
+        assert_eq!(supported_types.len(), 4);
     }
 }
 
@@ -441,7 +446,7 @@ mod integration_tests {
 
         // Verify all converters are properly configured
         let supported_types = registry.supported_types();
-        assert_eq!(supported_types.len(), 3);
+        assert_eq!(supported_types.len(), 4);
 
         for url_type in supported_types {
             let converter = registry.get_converter(&url_type);
@@ -453,6 +458,7 @@ mod integration_tests {
                 UrlType::Html => assert_eq!(converter.name(), "HTML"),
                 UrlType::GoogleDocs => assert_eq!(converter.name(), "Google Docs"),
                 UrlType::GitHubIssue => assert_eq!(converter.name(), "GitHub Issue"),
+                UrlType::LocalFile => assert_eq!(converter.name(), "Local File Converter"),
             }
         }
     }

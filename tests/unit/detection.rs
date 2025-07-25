@@ -537,7 +537,6 @@ mod url_validation_tests {
             "not-a-url",
             "ftp://example.com",
             "mailto:test@example.com",
-            "file:///path/to/file",
             "javascript:alert('xss')",
             "data:text/html,<h1>Test</h1>",
             "",
@@ -554,8 +553,8 @@ mod url_validation_tests {
             assert!(result.is_err(), "Should reject URL: {url}");
 
             match result.unwrap_err() {
-                MarkdownError::InvalidUrl { url: error_url } => {
-                    assert_eq!(error_url, url);
+                MarkdownError::ValidationError { kind, .. } => {
+                    assert_eq!(kind, markdowndown::types::ValidationErrorKind::InvalidUrl);
                 }
                 _ => panic!("Expected InvalidUrl error for: {url}"),
             }

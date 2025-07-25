@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let github_config = Config::builder()
         .github_token(
-            &std::env::var("GITHUB_TOKEN").expect("Please set GITHUB_TOKEN environment variable"),
+            std::env::var("GITHUB_TOKEN").expect("Please set GITHUB_TOKEN environment variable"),
         )
         .timeout_seconds(60)
         .user_agent("MarkdownDown-GitHub-Example/1.0")

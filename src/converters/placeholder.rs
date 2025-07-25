@@ -47,6 +47,41 @@ impl PlaceholderConverter {
     pub fn with_client(client: HttpClient, config: PlaceholderConfig) -> Self {
         Self { client, config }
     }
+
+    /// Extracts a title from the URL by using the path or service name.
+    fn extract_title_from_url(&self, url: &str) -> String {
+        // Try to extract meaningful title from URL path
+        if let Ok(parsed_url) = url::Url::parse(url) {
+            let path = parsed_url.path();
+            let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+            // For GitHub URLs, use issue/PR number and repo name
+            if segments.len() >= 4 && (segments[2] == "issues" || segments[2] == "pull") {
+                return format!("{}/{} #{}", segments[0], segments[1], segments[3]);
+            }
+
+            // For other URLs, use the last meaningful segment or filename
+            if let Some(last_segment) = segments.last() {
+                if !last_segment.is_empty() {
+                    // Remove file extension and URL decode
+                    let decoded = last_segment
+                        .replace("%20", " ")
+                        .replace("%28", "(")
+                        .replace("%29", ")")
+                        .replace("%2C", ",");
+
+                    if let Some(stem) = std::path::Path::new(&decoded).file_stem() {
+                        return stem.to_string_lossy().to_string();
+                    } else {
+                        return decoded;
+                    }
+                }
+            }
+        }
+
+        // Fallback to service name
+        format!("{} Document", self.config.service_name)
+    }
 }
 
 #[async_trait]
@@ -78,6 +113,8 @@ impl Converter for PlaceholderConverter {
         // Only generate frontmatter if configured to include it
         if self.config.output_config.include_frontmatter {
             let now = Utc::now();
+            let title = self.extract_title_from_url(url);
+            let converter_name = format!("{}Converter", self.config.service_name.replace(' ', ""));
             let mut builder = FrontmatterBuilder::new(url.to_string())
                 .exporter(format!(
                     "markdowndown-{}-placeholder-{}",
@@ -85,10 +122,12 @@ impl Converter for PlaceholderConverter {
                     env!("CARGO_PKG_VERSION")
                 ))
                 .download_date(now)
+                .additional_field("title".to_string(), title)
+                .additional_field("url".to_string(), url.to_string())
+                .additional_field("converter".to_string(), converter_name)
                 .additional_field("converted_at".to_string(), now.to_rfc3339())
                 .additional_field("conversion_type".to_string(), "placeholder".to_string())
-                .additional_field("service_name".to_string(), self.config.service_name.clone())
-                .additional_field("url".to_string(), url.to_string());
+                .additional_field("service_name".to_string(), self.config.service_name.clone());
 
             // Add custom frontmatter fields from configuration
             for (key, value) in &self.config.output_config.custom_frontmatter_fields {

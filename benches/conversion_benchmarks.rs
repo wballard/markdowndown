@@ -147,7 +147,13 @@ fn bench_html_converter_config(c: &mut Criterion) {
         let config = HtmlConverterConfig::default();
         let output_config = markdowndown::config::OutputConfig::default();
 
-        b.iter(|| HtmlConverter::with_config(black_box(client.clone()), black_box(config.clone()), black_box(output_config.clone())))
+        b.iter(|| {
+            HtmlConverter::with_config(
+                black_box(client.clone()),
+                black_box(config.clone()),
+                black_box(output_config.clone()),
+            )
+        })
     });
 
     group.finish();

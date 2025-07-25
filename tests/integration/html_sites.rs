@@ -146,7 +146,10 @@ async fn test_rust_docs_conversion() -> Result<(), Box<dyn std::error::Error>> {
     // Check for typical documentation content patterns
     // Note: Some docs sites use JavaScript to load content, so we check for basic structure
     assert!(
-        content.contains("```") || content.contains("    ") || content.contains("Rust") || content.contains("#"),
+        content.contains("```")
+            || content.contains("    ")
+            || content.contains("Rust")
+            || content.contains("#"),
         "Should contain documentation structure or Rust-related content"
     );
 

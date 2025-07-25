@@ -105,7 +105,12 @@ mod registry_creation_tests {
         };
         let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config);
+        let registry = ConverterRegistry::with_config(
+            client,
+            html_config,
+            &placeholder_settings,
+            &output_config,
+        );
         let supported_types = registry.supported_types();
 
         // Should support all URL types with custom configuration
@@ -444,7 +449,12 @@ mod integration_tests {
         };
         let output_config = markdowndown::config::OutputConfig::default();
 
-        let registry = ConverterRegistry::with_config(client, html_config, &placeholder_settings, &output_config);
+        let registry = ConverterRegistry::with_config(
+            client,
+            html_config,
+            &placeholder_settings,
+            &output_config,
+        );
 
         // Verify all converters are properly configured
         let supported_types = registry.supported_types();

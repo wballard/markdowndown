@@ -82,7 +82,12 @@ pub fn create_configured_converter_registry() -> ConverterRegistry {
     let html_config = HtmlConverterConfig::default();
     let placeholder_settings = create_test_placeholder_settings();
     let output_config = markdowndown::config::OutputConfig::default();
-    ConverterRegistry::with_config(http_client, html_config, &placeholder_settings, &output_config)
+    ConverterRegistry::with_config(
+        http_client,
+        html_config,
+        &placeholder_settings,
+        &output_config,
+    )
 }
 
 /// Get sample URLs for each converter type

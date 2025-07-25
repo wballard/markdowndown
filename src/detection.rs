@@ -344,9 +344,11 @@ impl UrlDetector {
                 // GitHub API URLs have the pattern: /repos/{owner}/{repo}/issues/{number} or /repos/{owner}/{repo}/pulls/{number}
                 // Need exactly 5 or more segments: "repos", owner, repo, "issues"/"pulls", number
                 if path_segments.len() >= 5 {
-                    if let (Some(repos_segment), Some(resource_segment), Some(number_segment)) =
-                        (path_segments.get(0), path_segments.get(3), path_segments.get(4))
-                    {
+                    if let (Some(repos_segment), Some(resource_segment), Some(number_segment)) = (
+                        path_segments.first(),
+                        path_segments.get(3),
+                        path_segments.get(4),
+                    ) {
                         if *repos_segment == "repos"
                             && (*resource_segment == "issues" || *resource_segment == "pulls")
                             && number_segment.parse::<u32>().is_ok()

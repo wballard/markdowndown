@@ -572,8 +572,7 @@ async fn test_memory_and_resource_efficiency() -> Result<(), Box<dyn std::error:
         // Allow higher variance due to DNS resolution, connection establishment, and network conditions
         assert!(
             time_variance < 10.0,
-            "Processing times should be reasonably consistent across iterations (got {:.2}x variance)",
-            time_variance
+            "Processing times should be reasonably consistent across iterations (got {time_variance:.2}x variance)"
         );
 
         // Content sizes should be identical for the same URL

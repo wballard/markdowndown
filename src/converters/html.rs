@@ -59,8 +59,16 @@ impl HtmlConverter {
     /// # Returns
     ///
     /// A new `HtmlConverter` instance with the specified configuration.
-    pub fn with_config(client: HttpClient, config: HtmlConverterConfig, output_config: crate::config::OutputConfig) -> Self {
-        Self { config, output_config, client }
+    pub fn with_config(
+        client: HttpClient,
+        config: HtmlConverterConfig,
+        output_config: crate::config::OutputConfig,
+    ) -> Self {
+        Self {
+            config,
+            output_config,
+            client,
+        }
     }
 
     /// Creates a new HTML converter with custom configuration.

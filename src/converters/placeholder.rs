@@ -96,7 +96,7 @@ impl Converter for PlaceholderConverter {
             }
 
             let frontmatter = builder.build()?;
-            let markdown_with_frontmatter = format!("{}\n{}", frontmatter, markdown_content);
+            let markdown_with_frontmatter = format!("{frontmatter}\n{markdown_content}");
             Markdown::new(markdown_with_frontmatter)
         } else {
             Markdown::new(markdown_content)

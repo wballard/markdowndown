@@ -134,6 +134,8 @@ Typical conversion times on modern hardware:
 | GitHub Issue | < 1s | 1-2s | 2-5s |
 | Office 365 | 2-5s | 5-15s | 15-60s |
 
+*Note: Performance metrics are hardware and network dependent. Actual conversion times may vary based on your system specifications, network connectivity, and document complexity.*
+
 Memory usage scales linearly with document size. Network latency is typically the limiting factor.
 
 ## Examples

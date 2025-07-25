@@ -121,8 +121,12 @@ impl MarkdownDown {
         let http_client = HttpClient::with_config(&config.http, &config.auth);
 
         // Create registry with configured HTTP client, HTML config, placeholder settings, and output config
-        let registry =
-            ConverterRegistry::with_config(http_client, config.html.clone(), &config.placeholder, &config.output);
+        let registry = ConverterRegistry::with_config(
+            http_client,
+            config.html.clone(),
+            &config.placeholder,
+            &config.output,
+        );
 
         Self {
             config,

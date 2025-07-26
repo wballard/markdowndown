@@ -825,4 +825,418 @@ mod tests {
 
         matches!(cli.command, Some(Commands::ListTypes));
     }
+
+    #[test]
+    fn test_config_file_defaults() {
+        let config = ConfigFile::default();
+        
+        assert_eq!(config.http.timeout_seconds, 30);
+        assert_eq!(config.http.max_redirects, 10);
+        assert!(config.http.user_agent.is_none());
+        assert!(config.authentication.github_token.is_none());
+        assert!(config.authentication.office365_token.is_none());
+        assert!(config.authentication.google_api_key.is_none());
+        assert!(config.output.include_frontmatter);
+        assert_eq!(config.output.format, "markdown");
+        assert_eq!(config.batch.default_concurrency, 5);
+        assert!(config.batch.skip_failures);
+        assert!(config.batch.show_progress);
+        assert_eq!(config.logging.level, "info");
+        assert_eq!(config.logging.format, "human");
+    }
+
+    #[test]
+    fn test_default_value_functions() {
+        assert_eq!(default_timeout(), 30);
+        assert_eq!(default_max_redirects(), 10);
+        assert!(default_true());
+        assert_eq!(default_format(), "markdown");
+        assert_eq!(default_concurrency(), 5);
+        assert_eq!(default_log_level(), "info");
+        assert_eq!(default_log_format(), "human");
+    }
+
+    #[test]
+    fn test_output_format_values() {
+        assert_eq!(OutputFormat::Markdown.to_possible_value().unwrap().get_name(), "markdown");
+        assert_eq!(OutputFormat::Json.to_possible_value().unwrap().get_name(), "json");
+        assert_eq!(OutputFormat::Yaml.to_possible_value().unwrap().get_name(), "yaml");
+    }
+
+    #[test]
+    fn test_build_config_from_defaults() {
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: None,
+            timeout: 30, // Default value
+            format: OutputFormat::Markdown,
+            no_frontmatter: false,
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let config = build_config(&cli).expect("Should build config from defaults");
+        
+        // Should use default values when no config file or CLI overrides
+        assert_eq!(config.http.timeout.as_secs(), 30);
+        assert!(config.output.include_frontmatter);
+        assert!(config.auth.github_token.is_none());
+    }
+
+    #[test]
+    fn test_build_config_with_cli_overrides() {
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: Some("cli-token".to_string()),
+            timeout: 60, // Override default
+            format: OutputFormat::Markdown,
+            no_frontmatter: true, // Override default
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: Some("cli-agent".to_string()),
+            command: None,
+        };
+
+        let config = build_config(&cli).expect("Should build config with CLI overrides");
+        
+        // Should use CLI overrides
+        assert_eq!(config.http.timeout.as_secs(), 60);
+        assert!(!config.output.include_frontmatter); // Overridden by no_frontmatter
+        assert_eq!(config.auth.github_token, Some("cli-token".to_string()));
+        assert_eq!(config.http.user_agent, "cli-agent");
+    }
+
+    #[test]
+    fn test_build_config_with_config_file() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("test.toml");
+        
+        let config_content = r#"
+[http]
+timeout_seconds = 45
+user_agent = "file-agent"
+
+[authentication]
+github_token = "file-token"
+office365_token = "office-token"
+google_api_key = "google-key"
+
+[output]
+include_frontmatter = false
+"#;
+        
+        fs::write(&config_path, config_content).expect("Failed to write config file");
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: Some(config_path.to_string_lossy().to_string()),
+            github_token: None,
+            timeout: 30, // Default, should be overridden by config file
+            format: OutputFormat::Markdown,
+            no_frontmatter: false,
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let config = build_config(&cli).expect("Should build config from file");
+        
+        // Should use values from config file
+        assert_eq!(config.http.timeout.as_secs(), 45);
+        assert!(!config.output.include_frontmatter);
+        assert_eq!(config.auth.github_token, Some("file-token".to_string()));
+        assert_eq!(config.auth.office365_token, Some("office-token".to_string()));
+        assert_eq!(config.auth.google_api_key, Some("google-key".to_string()));
+        assert_eq!(config.http.user_agent, "file-agent");
+    }
+
+    #[test]
+    fn test_find_default_config_paths() {
+        let paths = find_default_config_paths();
+        
+        // Should include current directory paths
+        assert!(paths.iter().any(|p| p.file_name().unwrap() == "markdowndown.toml"));
+        assert!(paths.iter().any(|p| p.file_name().unwrap() == ".markdowndown.toml"));
+        
+        // Should include potential HOME paths if HOME is set
+        if std::env::var_os("HOME").is_some() {
+            assert!(paths.iter().any(|p| p.to_string_lossy().contains(".markdowndown.toml")));
+        }
+        
+        // Should be non-empty
+        assert!(!paths.is_empty());
+    }
+
+    #[test]
+    fn test_load_config_file_default_when_not_found() {
+        // Test with non-existent config file
+        let result = load_config_file(Some("/nonexistent/path/config.toml"));
+        
+        // Should return default config when file not found
+        let config = result.expect("Should return default config when file not found");
+        assert_eq!(config.http.timeout_seconds, 30); // Default value
+    }
+
+    #[test]
+    fn test_format_output_markdown() {
+        use markdowndown::types::Markdown;
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: None,
+            timeout: 30,
+            format: OutputFormat::Markdown,
+            no_frontmatter: false,
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let markdown = Markdown::new("# Test Content\n\nThis is test content.".to_string()).expect("Valid markdown");
+        let output = format_output(&markdown, &cli).expect("Should format markdown output");
+        
+        assert_eq!(output, "# Test Content\n\nThis is test content.");
+    }
+
+    #[test]
+    fn test_format_output_json() {
+        use markdowndown::types::Markdown;
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: None,
+            timeout: 30,
+            format: OutputFormat::Json,
+            no_frontmatter: false,
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let markdown = Markdown::new("# Test".to_string()).expect("Valid markdown");
+        let output = format_output(&markdown, &cli).expect("Should format JSON output");
+        
+        // Should be valid JSON with expected structure
+        assert!(output.contains("\"content\""));
+        assert!(output.contains("\"format\""));
+        assert!(output.contains("markdown"));
+    }
+
+    #[test]
+    fn test_format_output_yaml() {
+        use markdowndown::types::Markdown;
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: None,
+            timeout: 30,
+            format: OutputFormat::Yaml,
+            no_frontmatter: false,
+            frontmatter_only: false,
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let markdown = Markdown::new("# Test".to_string()).expect("Valid markdown");
+        let output = format_output(&markdown, &cli).expect("Should format YAML output");
+        
+        // Should be YAML string format
+        assert!(!output.is_empty());
+        // YAML string should contain the content
+        assert!(output.contains("Test") || output.contains("#"));
+    }
+
+    #[test]
+    fn test_format_output_frontmatter_only() {
+        use markdowndown::types::Markdown;
+        
+        let cli = Cli {
+            url: None,
+            output: None,
+            config: None,
+            github_token: None,
+            timeout: 30,
+            format: OutputFormat::Markdown,
+            no_frontmatter: false,
+            frontmatter_only: true, // Only frontmatter
+            verbose: false,
+            quiet: false,
+            debug: false,
+            user_agent: None,
+            command: None,
+        };
+
+        let markdown = Markdown::new("# Test without frontmatter".to_string()).expect("Valid markdown");
+        let output = format_output(&markdown, &cli).expect("Should format frontmatter output");
+        
+        // Should show message when no frontmatter found
+        assert!(output.contains("No frontmatter found"));
+    }
+
+    #[test]
+    fn test_write_output_to_file() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let output_file = temp_dir.path().join("test-output.md");
+        
+        let content = "# Test Output\n\nThis is test content.";
+        
+        write_output(content, Some(output_file.to_str().unwrap())).expect("Should write to file");
+        
+        // File should exist and contain expected content
+        assert!(output_file.exists());
+        let file_content = fs::read_to_string(&output_file).expect("Should read file");
+        assert_eq!(file_content, content);
+    }
+
+    #[test]
+    fn test_write_output_to_stdout() {
+        // Test writing to stdout (no file specified)
+        let content = "Test stdout content";
+        
+        // This should not panic or return error
+        let result = write_output(content, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_detect_url_type_function() {
+        let result = detect_url_type("https://github.com/owner/repo/issues/123");
+        assert!(result.is_ok());
+        
+        let result = detect_url_type("https://docs.google.com/document/d/abc123/edit");
+        assert!(result.is_ok());
+        
+        let result = detect_url_type("https://example.com");
+        assert!(result.is_ok());
+        
+        // Invalid URL should return error
+        let result = detect_url_type("not-a-url");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_authentication_options() {
+        let args = vec![
+            "markdowndown",
+            "https://example.com",
+            "--github-token",
+            "test-token",
+            "--user-agent",
+            "test-agent/1.0",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        assert_eq!(cli.github_token, Some("test-token".to_string()));
+        assert_eq!(cli.user_agent, Some("test-agent/1.0".to_string()));
+    }
+
+    #[test]
+    fn test_cli_frontmatter_options() {
+        let args = vec![
+            "markdowndown",
+            "https://example.com",
+            "--no-frontmatter",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(cli.no_frontmatter);
+        assert!(!cli.frontmatter_only);
+
+        let args = vec![
+            "markdowndown",
+            "https://example.com",
+            "--frontmatter-only",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(!cli.no_frontmatter);
+        assert!(cli.frontmatter_only);
+    }
+
+    #[test]
+    fn test_cli_logging_options() {
+        let args = vec![
+            "markdowndown",
+            "https://example.com",
+            "--verbose",
+            "--debug",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(cli.verbose);
+        assert!(cli.debug);
+
+        let args = vec![
+            "markdowndown",
+            "https://example.com",
+            "--quiet",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(cli.quiet);
+        assert!(!cli.verbose);
+    }
+
+    #[test]
+    fn test_batch_command_full_options() {
+        let args = vec![
+            "markdowndown",
+            "batch",
+            "urls.txt",
+            "--concurrency",
+            "10",
+            "--output-dir",
+            "output",
+            "--stats",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        if let Some(Commands::Batch {
+            file,
+            concurrency,
+            output_dir,
+            stats,
+        }) = cli.command
+        {
+            assert_eq!(file, "urls.txt");
+            assert_eq!(concurrency, 10);
+            assert_eq!(output_dir, Some("output".to_string()));
+            assert!(stats);
+        } else {
+            panic!("Expected batch command");
+        }
+    }
 }

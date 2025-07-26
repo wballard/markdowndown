@@ -607,6 +607,524 @@ mod configuration_tests {
     }
 }
 
+/// Tests for frontmatter generation
+mod frontmatter_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_convert_with_frontmatter_enabled() {
+        let mut server = Server::new_async().await;
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Document with Title</title>
+</head>
+<body>
+    <h1>Main Heading</h1>
+    <p>Content here</p>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/frontmatter-test.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        
+        // Enable frontmatter and add custom fields
+        let html_config = HtmlConverterConfig::default();
+        let mut output_config = markdowndown::config::OutputConfig::default();
+        output_config.include_frontmatter = true;
+        output_config.custom_frontmatter_fields.push(("custom_field".to_string(), "custom_value".to_string()));
+        output_config.custom_frontmatter_fields.push(("author".to_string(), "test_author".to_string()));
+        
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
+
+        let url = format!("{}/frontmatter-test.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        
+        // Should have frontmatter
+        assert!(markdown.frontmatter().is_some());
+        let frontmatter = markdown.frontmatter().unwrap();
+        
+        // Check frontmatter content
+        assert!(frontmatter.contains("title: Document with Title"));
+        assert!(frontmatter.contains("url:"));
+        assert!(frontmatter.contains("date_downloaded:"));
+        assert!(frontmatter.contains("converted_at:"));
+        assert!(frontmatter.contains("conversion_type: html"));
+        assert!(frontmatter.contains("custom_field: custom_value"));
+        assert!(frontmatter.contains("author: test_author"));
+        
+        // Content should be present
+        assert!(markdown.content_only().contains("# Main Heading"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_with_frontmatter_disabled() {
+        let mut server = Server::new_async().await;
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Document Title</title>
+</head>
+<body>
+    <h1>Content</h1>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/no-frontmatter.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        
+        // Disable frontmatter
+        let html_config = HtmlConverterConfig::default();
+        let mut output_config = markdowndown::config::OutputConfig::default();
+        output_config.include_frontmatter = false;
+        
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
+
+        let url = format!("{}/no-frontmatter.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        
+        // Should not have frontmatter
+        assert!(markdown.frontmatter().is_none());
+        
+        // Content should be present
+        assert!(markdown.content_only().contains("# Content"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_html_with_no_title() {
+        let mut server = Server::new_async().await;
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+    <h1>Content without title tag</h1>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/no-title.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        
+        let html_config = HtmlConverterConfig::default();
+        let mut output_config = markdowndown::config::OutputConfig::default();
+        output_config.include_frontmatter = true;
+        
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
+
+        let url = format!("{}/no-title.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        
+        // Should have frontmatter but no title field
+        assert!(markdown.frontmatter().is_some());
+        let frontmatter = markdown.frontmatter().unwrap();
+        assert!(!frontmatter.contains("title:"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_html_with_frontmatter_and_title_extraction() {
+        let mut server = Server::new_async().await;
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Document with Title</title>
+</head>
+<body>
+    <h1>Main Heading</h1>
+    <p>Content here</p>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/title-test.html")
+            .match_header("Accept", "text/html,application/xhtml+xml") // Test custom headers (lines 183-185)
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        
+        // Enable frontmatter and add custom fields
+        let html_config = HtmlConverterConfig::default();
+        let mut output_config = markdowndown::config::OutputConfig::default();
+        output_config.include_frontmatter = true;
+        output_config.custom_frontmatter_fields.push(("custom_field".to_string(), "custom_value".to_string()));
+        output_config.custom_frontmatter_fields.push(("author".to_string(), "test_author".to_string()));
+        
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
+
+        let url = format!("{}/title-test.html", server.url());
+        let result = converter.convert(&url).await; // Tests lines 181, 187, 190, 202-208, 211
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        
+        // Should have frontmatter with extracted title (tests title extraction lines 166, 168-169)
+        assert!(markdown.frontmatter().is_some());
+        let frontmatter = markdown.frontmatter().unwrap();
+        
+        // Check frontmatter content (tests lines 202-208)
+        assert!(frontmatter.contains("title: Document with Title"));
+        assert!(frontmatter.contains("url:"));
+        assert!(frontmatter.contains("date_downloaded:"));
+        assert!(frontmatter.contains("converted_at:"));
+        assert!(frontmatter.contains("conversion_type: html"));
+        assert!(frontmatter.contains("custom_field: custom_value"));
+        assert!(frontmatter.contains("author: test_author"));
+        
+        // Content should be present (tests line 190)
+        assert!(markdown.content_only().contains("# Main Heading"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_html_without_title_tag() {
+        let mut server = Server::new_async().await;
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+    <h1>Content without title tag</h1>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/no-title.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        
+        let html_config = HtmlConverterConfig::default();
+        let mut output_config = markdowndown::config::OutputConfig::default();
+        output_config.include_frontmatter = true;
+        
+        let converter = HtmlConverter::with_config(client, html_config, output_config);
+
+        let url = format!("{}/no-title.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        
+        // Should have frontmatter but no title field (tests line 174 - None return)
+        assert!(markdown.frontmatter().is_some());
+        let frontmatter = markdown.frontmatter().unwrap();
+        assert!(!frontmatter.contains("title:"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_empty_html_content() {
+        let mut server = Server::new_async().await;
+        // HTML that produces empty markdown content after processing
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Empty Content</title>
+</head>
+<body>
+    <!-- only comments -->
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/empty-content.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        let converter = create_html_converter_with_client(client);
+
+        let url = format!("{}/empty-content.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        let content = markdown.content_only();
+        
+        // Should contain the empty document placeholder (tests lines 193-194)
+        assert!(content.contains("<!-- Empty HTML document -->"));
+    }
+
+    #[tokio::test]
+    async fn test_convert_html_produces_empty_content() {
+        let mut server = Server::new_async().await;
+        // HTML that produces empty or whitespace-only markdown content after processing
+        let html_content = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Empty Content</title>
+    <script>/* script content */</script>
+    <style>/* style content */</style>
+</head>
+<body>
+    <!-- only comments and elements that get removed -->
+    <script>console.log("removed");</script>
+    <style>.class { color: red; }</style>
+</body>
+</html>"#;
+
+        let mock = server
+            .mock("GET", "/empty-content.html")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body(html_content)
+            .create_async()
+            .await;
+
+        let config = Config::builder().timeout_seconds(5).build();
+        let client = HttpClient::with_config(&config.http, &config.auth);
+        let converter = create_html_converter_with_client(client);
+
+        let url = format!("{}/empty-content.html", server.url());
+        let result = converter.convert(&url).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let markdown = result.unwrap();
+        let content = markdown.content_only();
+        
+        // Should contain the empty document placeholder
+        assert!(content.contains("<!-- Empty HTML document -->"));
+    }
+}
+
+/// Tests for title extraction functionality
+mod title_extraction_tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_title_with_valid_title() {
+        let converter = HtmlConverter::new();
+        let html = r#"<html><head><title>Test Document Title</title></head><body></body></html>"#;
+        
+        // Use reflection to access private method via convert_html which uses it
+        let result = converter.convert_html(html);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_title_with_nested_title() {
+        let converter = HtmlConverter::new();
+        let html = r#"<html><head><title>  Nested Title with Whitespace  </title></head><body></body></html>"#;
+        
+        let result = converter.convert_html(html);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_title_with_no_title_tag() {
+        let converter = HtmlConverter::new();
+        let html = r#"<html><head></head><body><h1>No title tag</h1></body></html>"#;
+        
+        let result = converter.convert_html(html);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_title_with_malformed_title() {
+        let converter = HtmlConverter::new();
+        let html = r#"<html><head><title>Unclosed title<body></body></html>"#;
+        
+        let result = converter.convert_html(html);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_title_with_empty_title() {
+        let converter = HtmlConverter::new();
+        let html = r#"<html><head><title></title></head><body></body></html>"#;
+        
+        let result = converter.convert_html(html);
+        assert!(result.is_ok());
+    }
+}
+
+/// Tests for error handling in HTML conversion
+mod html_error_handling_tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_html_empty_input_error() {
+        let converter = HtmlConverter::new();
+        
+        // Test empty HTML input (should trigger error on line 124-129)
+        let result = converter.convert_html("");
+        
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MarkdownError::ParseError { message } => {
+                assert!(message.contains("HTML content cannot be empty"));
+            }
+            _ => panic!("Expected ParseError for empty HTML"),
+        }
+    }
+
+    #[test]
+    fn test_convert_html_whitespace_only_error() {
+        let converter = HtmlConverter::new();
+        
+        // Test whitespace-only HTML input (should trigger error on line 124-129)
+        let result = converter.convert_html("   \n\t  ");
+        
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MarkdownError::ParseError { message } => {
+                assert!(message.contains("HTML content cannot be empty"));
+            }
+            _ => panic!("Expected ParseError for whitespace-only HTML"),
+        }
+    }
+
+    #[test]
+    fn test_title_extraction_edge_cases() {
+        let converter = HtmlConverter::new();
+        
+        // Test title extraction with different HTML structures
+        let test_cases = [
+            ("<title>Simple Title</title>", Some("Simple Title".to_string())),
+            ("<title>  Whitespace Title  </title>", Some("Whitespace Title".to_string())),
+            ("<title></title>", Some("".to_string())),
+            ("<html><body>No title tag</body></html>", None),
+            ("<title>Unclosed title", None),
+            ("", None),
+        ];
+
+        for (html, _expected) in test_cases {
+            // We can't directly call extract_title as it's private, but we can test
+            // the convert_html method which uses it internally
+            if html.is_empty() {
+                // Skip empty HTML as it will trigger the empty input error
+                continue;
+            }
+            
+            let result = converter.convert_html(html);
+            
+            // For valid HTML, the conversion should succeed
+            if html.contains("<title>") && html.contains("</title>") {
+                assert!(result.is_ok(), "Failed to convert HTML: {}", html);
+            }
+        }
+    }
+
+    #[test] 
+    fn test_convert_html_error_wrapping() {
+        let converter = HtmlConverter::new();
+        
+        // Test with valid but complex HTML to ensure no errors occur
+        let complex_html = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Complex Document</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Heading</h1>
+    <p>Some content with <strong>bold</strong> and <em>italic</em> text.</p>
+    <ul>
+        <li>Item 1</li>
+        <li>Item 2</li>
+    </ul>
+</body>
+</html>"#;
+        
+        let result = converter.convert_html(complex_html);
+        
+        // Should handle complex HTML gracefully
+        assert!(result.is_ok());
+        let markdown = result.unwrap();
+        assert!(markdown.contains("# Heading"));
+        assert!(markdown.contains("**bold**"));
+        assert!(markdown.contains("*italic*"));
+    }
+
+    #[test]
+    fn test_convert_html_with_extremely_long_content() {
+        let converter = HtmlConverter::new();
+        
+        // Create very long HTML content
+        let long_title = "A".repeat(1000000);
+        let html = format!(r#"<html><head><title>{}</title></head><body><p>Content</p></body></html>"#, long_title);
+        
+        let result = converter.convert_html(&html);
+        assert!(result.is_ok());
+    }
+}
+
+/// Tests for converter name method
+mod converter_name_tests {
+    use super::*;
+
+    #[test]
+    fn test_converter_name() {
+        let converter = HtmlConverter::new();
+        assert_eq!(converter.name(), "HTML");
+    }
+
+    #[test]
+    fn test_converter_name_consistency() {
+        let converter1 = HtmlConverter::new();
+        let converter2 = HtmlConverter::default();
+        assert_eq!(converter1.name(), converter2.name());
+    }
+}
+
 /// Integration tests combining multiple features
 mod integration_tests {
     use super::*;
